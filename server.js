@@ -15,6 +15,7 @@
 // =====================================================
 
 require('dotenv').config();
+const moment = require('moment-timezone');
 const path = require('path');
 const express = require('express');
 const cors    = require('cors');
@@ -71,7 +72,7 @@ app.get('/', (req, res) => {
 
 /** Today's date string in UTC, e.g. '2024-06-08' */
 function todayUTC() {
-    return new Date().toISOString().slice(0, 10);
+    return moment.tz('Europe/Brussels').format('YYYY-MM-DD');
 }
 
 /**
@@ -297,22 +298,16 @@ app.get('/api/leaderboard', async (req, res) => {
 // before any player hits /api/daily.
 
 function scheduleMidnightSeed() {
-    const now       = new Date();
-    const nextMidnight = new Date(Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate() + 1,   // tomorrow
-        0, 0, 0, 0
-    ));
-    const msUntil = nextMidnight.getTime() - Date.now();
+    const now = moment.tz('Europe/Brussels');
 
-    console.log(
-        `[cron] Next seed in ${Math.round(msUntil / 1000)}s ` +
-        `(${nextMidnight.toISOString()})`
-    );
+    // Calculate exact target time for the next 00:00:00 in Belgium
+    const nextMidnight = now.clone().add(1, 'days').startOf('day');
+    const msUntil = nextMidnight.diff(now);
+
+    console.log(`[cron] Next seed in ${Math.round(msUntil / 1000)}s (${nextMidnight.format()})`);
 
     setTimeout(() => {
-        const dateStr = todayUTC(); // now it IS the new day
+        const dateStr = todayUTC(); // Grabs the fresh new day in Belgium
         try {
             db.seedColors(dateStr);
             console.log(`[cron] Midnight seed complete for ${dateStr}`);
@@ -322,7 +317,6 @@ function scheduleMidnightSeed() {
         scheduleMidnightSeed(); // schedule the next one
     }, msUntil);
 }
-
 // ─── UTILITY ──────────────────────────────────────
 
 function extractBearer(req) {

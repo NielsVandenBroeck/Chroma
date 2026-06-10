@@ -2,6 +2,7 @@
 // bot.js — Chroma Discord Bot Companion
 // =====================================================
 require('dotenv').config();
+const moment = require('moment-timezone');
 const {
     Client,
     GatewayIntentBits,
@@ -193,8 +194,8 @@ client.on('interactionCreate', async interaction => {
 
         if (interaction.commandName === 'today') {
             await interaction.deferReply();
-            const todayUTC = new Date().toISOString().slice(0, 10);
-            await displayLeaderboard(interaction, todayUTC, "🎨 Here are today's top Chroma results:");
+            const todayLocal = moment.tz('Europe/Brussels').format('YYYY-MM-DD');
+            await displayLeaderboard(interaction, todayLocal, "🎨 Here are today's top Chroma results:");
         }
     }
 });
@@ -202,23 +203,18 @@ client.on('interactionCreate', async interaction => {
 // ─── AUTOMATED RECAP CRON ─────────────────────────
 
 function scheduleYesterdayPost() {
-    const now = new Date();
+    const now = moment.tz('Europe/Brussels');
 
-    // Calculate exact target time for 00:00:00 UTC (Next Midnight)
-    const nextPost = new Date(Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate() + 1, // Tomorrow
-        0, 0, 0, 0
-    ));
+    // Calculate exact target time for the next 00:00:00 in Belgium
+    const nextMidnight = now.clone().add(1, 'days').startOf('day');
+    const msUntil = nextMidnight.diff(now);
 
-    const msUntil = nextPost.getTime() - Date.now();
-    console.log(`[bot-cron] Next automated leaderboard post in ${Math.round(msUntil / 1000)}s (${nextPost.toISOString()})`);
+    console.log(`[bot-cron] Next automated leaderboard post in ${Math.round(msUntil / 1000)}s (${nextMidnight.format()})`);
 
     setTimeout(async () => {
         try {
-            // At exactly 00:00:00, look 1 minute into the past to safely get yesterday's UTC date string
-            const yesterdayStr = new Date(Date.now() - 60 * 1000).toISOString().slice(0, 10);
+            // At exactly midnight, look 1 minute into the past to safely get yesterday's date
+            const yesterdayStr = moment.tz('Europe/Brussels').subtract(1, 'minutes').format('YYYY-MM-DD');
             const channelId = process.env.DISCORD_LEADERBOARD_CHANNEL_ID;
 
             if (channelId) {
@@ -226,8 +222,6 @@ function scheduleYesterdayPost() {
                 if (channel) {
                     await displayLeaderboard(channel, yesterdayStr, `🏆 **The Final Leaderboard results for ${yesterdayStr} are locked in!**`);
                 }
-            } else {
-                console.log('[bot-cron] Skipping auto-post: DISCORD_LEADERBOARD_CHANNEL_ID missing from environment variables.');
             }
         } catch (err) {
             console.error('[bot-cron] Failed to execute automated post:', err);
@@ -243,8 +237,9 @@ module.exports.startBot = async () => {
     await registerCommands();
     client.login(process.env.DISCORD_BOT_TOKEN);
 
-    client.once('ready', () => {
+    // Changed 'ready' to 'clientReady' to fix the Deprecation Warning!
+    client.once('clientReady', () => {
         console.log('[bot] Discord bot initialized and logged in.');
-        scheduleYesterdayPost(); // Fire up the automated clock routine!
+        scheduleYesterdayPost();
     });
 };
