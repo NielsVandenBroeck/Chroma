@@ -11,7 +11,8 @@ const {
     EmbedBuilder,
     AttachmentBuilder,
 } = require('discord.js');
-const { createCanvas } = require('@napi-rs/canvas');
+const PImage = require('pureimage');
+const { PassThrough } = require('stream');
 const db = require('./db'); // Reuse your existing database logic
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -74,25 +75,28 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ content: "No one has played Chroma today yet! Be the first! 🔥" });
         }
 
-        // ⏱️ Defer the reply because image generation might take > 3 seconds
+        // ⏱️ Defer the reply to give the Pi time to draw the image
         await interaction.deferReply();
 
-        // 🎨 CANVAS SETUP
-        // Limit to Top 10 so the image doesn't get ridiculously tall
+        // 1. LOAD FONT
+        const font = PImage.registerFont('Roboto-Regular.ttf', 'Roboto');
+        font.loadSync();
+
+        // 2. CANVAS SETUP
         const topPlayers = board.slice(0, 10);
         const width = 800;
-        const height = 120 + (topPlayers.length * 60); // Dynamic height
+        const height = 120 + (topPlayers.length * 60);
 
-        const canvas = createCanvas(width, height);
+        const canvas = PImage.make(width, height);
         const ctx = canvas.getContext('2d');
 
-        // Draw Background (Discord Dark Theme Color)
+        // Draw Background
         ctx.fillStyle = '#2B2D31';
         ctx.fillRect(0, 0, width, height);
 
         // Draw Header Title
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 36px sans-serif';
+        ctx.font = '36pt Roboto';
         ctx.fillText(`Chroma Leaderboard — ${todayUTC}`, 40, 60);
 
         // Draw Player Rows
@@ -102,48 +106,54 @@ client.on('interactionCreate', async interaction => {
 
             // Username
             ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 24px sans-serif';
+            ctx.font = '24pt Roboto';
             ctx.fillText(`${rankPrefix} @${entry.username}`, 40, y);
 
             // Total Score
-            ctx.fillStyle = '#A6A7AB'; // Light grey
-            ctx.font = '24px sans-serif';
+            ctx.fillStyle = '#A6A7AB';
             ctx.fillText(`${entry.total} pts`, 300, y);
 
-            // Draw Score Blocks (Wordle style!)
+            // Draw Score Blocks
             let xOffset = 450;
             entry.scores.forEach(score => {
-                // Determine block color based on score threshold
                 if (score >= 180) {
-                    ctx.fillStyle = '#43B581'; // Green (Great)
+                    ctx.fillStyle = '#43B581'; // Green
                 } else if (score >= 100) {
-                    ctx.fillStyle = '#FAA61A'; // Yellow/Orange (Okay)
+                    ctx.fillStyle = '#FAA61A'; // Yellow
                 } else {
-                    ctx.fillStyle = '#F04747'; // Red (Bad)
+                    ctx.fillStyle = '#F04747'; // Red
                 }
 
-                // Draw rounded rectangle block
-                ctx.beginPath();
-                ctx.roundRect(xOffset, y - 24, 50, 30, 5);
-                ctx.fill();
+                // Draw standard rectangle block
+                ctx.fillRect(xOffset, y - 24, 50, 30);
 
-                // Draw the specific round score text inside the block
+                // Draw score text inside the block
                 ctx.fillStyle = '#FFFFFF';
-                ctx.font = 'bold 14px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(score.toString(), xOffset + 25, y - 4);
-                ctx.textAlign = 'left'; // Reset alignment
+                ctx.font = '14pt Roboto';
 
-                xOffset += 60; // Space between blocks
+                // Manual text centering based on digit count
+                const textX = score.toString().length === 3 ? xOffset + 5 :
+                    score.toString().length === 2 ? xOffset + 12 : xOffset + 18;
+
+                ctx.fillText(score.toString(), textX, y - 4);
+
+                xOffset += 60;
             });
         });
 
-        // 📦 PACKAGE AND SEND
-        const attachment = new AttachmentBuilder(canvas.toBuffer('image/png'), { name: 'chroma-leaderboard.png' });
+        // 3. PACKAGE AND SEND (Using streams)
+        const pass = new PassThrough();
 
-        await interaction.editReply({
-            content: "🔥 Here are today's top Chroma results:",
-            files: [attachment]
+        PImage.encodePNGToStream(canvas, pass).then(async () => {
+            const attachment = new AttachmentBuilder(pass, { name: 'chroma-leaderboard.png' });
+
+            await interaction.editReply({
+                content: "🔥 Here are today's top Chroma results:",
+                files: [attachment]
+            });
+        }).catch(err => {
+            console.error("Image encoding error:", err);
+            interaction.editReply({ content: "Oops, an error occurred while generating the image!" });
         });
     }
 });
