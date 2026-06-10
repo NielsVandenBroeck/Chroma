@@ -206,7 +206,8 @@ app.post('/api/score', async (req, res) => {
     const token = extractBearer(req);
     if (!token) return res.status(401).json({ error: 'Unauthorised' });
 
-    const { scores, total } = req.body;
+    // 1. Extract channelId from the frontend request!
+    const { scores, total, channelId } = req.body;
 
     if (!validateScores(scores)) {
         return res.status(400).json({ error: 'Invalid scores array' });
@@ -237,7 +238,14 @@ app.post('/api/score', async (req, res) => {
             });
         }
 
-        // Return the leaderboard rank right away for that dopamine hit
+        // 2. TRIGGER THE BOT TO POST IN CHAT!
+        if (channelId) {
+            bot.sendLeaderboardToChannel(
+                channelId,
+                `**@${user.global_name ?? user.username}** was playing Chroma!`
+            );
+        }
+
         const board = db.getLeaderboard(dateStr);
         const rank  = board.findIndex((r) => r.userId === user.id) + 1;
 

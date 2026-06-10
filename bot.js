@@ -195,7 +195,7 @@ client.on('interactionCreate', async interaction => {
         if (interaction.commandName === 'today') {
             await interaction.deferReply();
             const todayLocal = moment.tz('Europe/Brussels').format('YYYY-MM-DD');
-            await displayLeaderboard(interaction, todayLocal, "🎨 Here are today's top Chroma results:");
+            await displayLeaderboard(interaction, todayLocal, "Here are today's Chroma results:");
         }
     }
 });
@@ -206,7 +206,7 @@ function scheduleYesterdayPost() {
     const now = moment.tz('Europe/Brussels');
 
     // Set target time to exactly 00:10:00 today
-    let nextPost = now.clone().startOf('day').add(14, 'minutes');
+    let nextPost = now.clone().startOf('day').add(10, 'minutes');
 
     // If it is already past 00:10 today, schedule it for 00:10 tomorrow!
     if (now.isAfter(nextPost)) {
@@ -226,7 +226,7 @@ function scheduleYesterdayPost() {
             if (channelId) {
                 const channel = await client.channels.fetch(channelId);
                 if (channel) {
-                    await displayLeaderboard(channel, yesterdayStr, `🏆 **The Final Leaderboard results for ${yesterdayStr} are locked in!**`);
+                    await displayLeaderboard(channel, yesterdayStr, `**The Final Leaderboard results for ${yesterdayStr}:**`);
                 }
             } else {
                 console.log('[bot-cron] Skipping auto-post: DISCORD_LEADERBOARD_CHANNEL_ID missing from environment variables.');
@@ -238,6 +238,22 @@ function scheduleYesterdayPost() {
         scheduleYesterdayPost();
     }, msUntil);
 }
+
+
+module.exports.sendLeaderboardToChannel = async (channelId, messageText) => {
+    try {
+        const channel = await client.channels.fetch(channelId);
+        if (!channel) return;
+
+        // Get today's date in Belgium time to match the database
+        const todayLocal = moment.tz('Europe/Brussels').format('YYYY-MM-DD');
+
+        await displayLeaderboard(channel, todayLocal, messageText);
+    } catch (err) {
+        console.error('[bot] Failed to auto-post leaderboard to channel:', err);
+    }
+};
+
 
 // ─── STARTUP ──────────────────────────────────────
 
