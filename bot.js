@@ -66,7 +66,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.launchActivity();
     }
 
-    // Command: /today
+// Command: /today
     if (interaction.commandName === 'today') {
         const todayUTC = new Date().toISOString().slice(0, 10);
         const board = db.getLeaderboard(todayUTC);
@@ -78,83 +78,104 @@ client.on('interactionCreate', async interaction => {
         // ⏱️ Defer the reply to give the Pi time to draw the image
         await interaction.deferReply();
 
-        // 1. LOAD FONT
-        const font = PImage.registerFont('Roboto-Regular.ttf', 'Roboto');
-        font.loadSync();
+        try {
+            // 1. FETCH TODAY'S COLORS & SETUP FONT
+            const dailyColors = db.getTodayColors(todayUTC);
+            const fontPath = path.join(__dirname, 'Roboto-Regular.ttf');
+            const font = PImage.registerFont(fontPath, 'Roboto');
+            font.loadSync();
 
-        // 2. CANVAS SETUP
-        const topPlayers = board.slice(0, 10);
-        const width = 800;
-        const height = 120 + (topPlayers.length * 60);
+            // 2. CANVAS SETUP
+            const topPlayers = board.slice(0, 10);
+            const width = 800;
+            const height = 120 + (topPlayers.length * 60);
 
-        const canvas = PImage.make(width, height);
-        const ctx = canvas.getContext('2d');
+            const canvas = PImage.make(width, height);
+            const ctx = canvas.getContext('2d');
 
-        // Draw Background
-        ctx.fillStyle = '#2B2D31';
-        ctx.fillRect(0, 0, width, height);
+            // Draw Background
+            ctx.fillStyle = '#2B2D31';
+            ctx.fillRect(0, 0, width, height);
 
-        // Draw Header Title
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '36pt Roboto';
-        ctx.fillText(`Chroma Leaderboard — ${todayUTC}`, 40, 60);
-
-        // Draw Player Rows
-        topPlayers.forEach((entry, index) => {
-            const y = 140 + (index * 60);
-            const rankPrefix = index === 0 ? '👑' : `${index + 1}.`;
-
-            // Username
+            // Draw Header Title
             ctx.fillStyle = '#FFFFFF';
-            ctx.font = '24pt Roboto';
-            ctx.fillText(`${rankPrefix} @${entry.username}`, 40, y);
+            ctx.font = '36pt Roboto';
+            ctx.fillText(`Chroma Leaderboard — ${todayUTC}`, 40, 60);
 
-            // Total Score
-            ctx.fillStyle = '#A6A7AB';
-            ctx.fillText(`${entry.total} pts`, 300, y);
+            // Helper: Convert HSB to CSS RGB string
+            const hsbToRgb = (h, s, b) => {
+                const f = (n, k = (n + h / 60) % 6) => b - b * s * Math.max(Math.min(k, 4 - k, 1), 0);
+                return `rgb(${Math.round(f(5) * 255)}, ${Math.round(f(3) * 255)}, ${Math.round(f(1) * 255)})`;
+            };
 
-            // Draw Score Blocks
-            let xOffset = 450;
-            entry.scores.forEach(score => {
-                if (score >= 180) {
-                    ctx.fillStyle = '#43B581'; // Green
-                } else if (score >= 100) {
-                    ctx.fillStyle = '#FAA61A'; // Yellow
-                } else {
-                    ctx.fillStyle = '#F04747'; // Red
-                }
+            // Draw Player Rows
+            topPlayers.forEach((entry, index) => {
+                const y = 140 + (index * 60);
 
-                // Draw standard rectangle block
-                ctx.fillRect(xOffset, y - 24, 50, 30);
+                // Use standard numbers instead of the crown emoji to prevent broken characters
+                const rankPrefix = `${index + 1}.`;
 
-                // Draw score text inside the block
+                // Strip emojis/special characters out of the username so they don't render as boxes
+                const safeUsername = entry.username.replace(/[^\x20-\x7E]/g, '').trim() || 'Player';
+
+                // Username
                 ctx.fillStyle = '#FFFFFF';
-                ctx.font = '14pt Roboto';
+                ctx.font = '24pt Roboto';
+                ctx.fillText(`${rankPrefix} @${safeUsername}`, 40, y);
 
-                // Manual text centering based on digit count
-                const textX = score.toString().length === 3 ? xOffset + 5 :
-                    score.toString().length === 2 ? xOffset + 12 : xOffset + 18;
+                // Total Score
+                ctx.fillStyle = '#A6A7AB';
+                ctx.fillText(`${entry.total} pts`, 300, y);
 
-                ctx.fillText(score.toString(), textX, y - 4);
+                // Draw Score Blocks using TODAY'S COLORS!
+                let xOffset = 450;
+                entry.scores.forEach((score, roundIndex) => {
+                    // Grab the target color for this specific round
+                    const targetColor = dailyColors[roundIndex];
 
-                xOffset += 60;
+                    // Paint the block the actual color of the round
+                    ctx.fillStyle = hsbToRgb(targetColor.h, targetColor.s, targetColor.b);
+                    ctx.fillRect(xOffset, y - 24, 50, 30);
+
+                    // Check brightness: if the color is really bright/light, use black text. Otherwise, use white text.
+                    ctx.fillStyle = targetColor.b > 0.65 ? '#000000' : '#FFFFFF';
+                    ctx.font = '14pt Roboto';
+
+                    // Center the text based on digit count
+                    const textX = score.toString().length === 3 ? xOffset + 5 :
+                        score.toString().length === 2 ? xOffset + 12 : xOffset + 18;
+
+                    ctx.fillText(score.toString(), textX, y - 4);
+
+                    xOffset += 60;
+                });
             });
-        });
 
-        // 3. PACKAGE AND SEND (Using streams)
-        const pass = new PassThrough();
+            // 3. PACKAGE AND SEND
+            const pass = new PassThrough();
+            const chunks = [];
 
-        PImage.encodePNGToStream(canvas, pass).then(async () => {
-            const attachment = new AttachmentBuilder(pass, { name: 'chroma-leaderboard.png' });
+            pass.on('data', chunk => chunks.push(chunk));
 
-            await interaction.editReply({
-                content: "🔥 Here are today's top Chroma results:",
-                files: [attachment]
+            pass.on('end', async () => {
+                const buffer = Buffer.concat(chunks);
+                const attachment = new AttachmentBuilder(buffer, { name: 'chroma-leaderboard.png' });
+
+                await interaction.editReply({
+                    content: "🎨 Here are today's top Chroma results:",
+                    files: [attachment]
+                });
             });
-        }).catch(err => {
-            console.error("Image encoding error:", err);
-            interaction.editReply({ content: "Oops, an error occurred while generating the image!" });
-        });
+
+            PImage.encodePNGToStream(canvas, pass).catch(err => {
+                console.error("Image encoding error:", err);
+                interaction.editReply({ content: "Oops, an error occurred while saving the image!" });
+            });
+
+        } catch (err) {
+            console.error("General canvas error:", err);
+            await interaction.editReply({ content: "Oops, an error occurred while preparing the canvas!" });
+        }
     }
 });
 
