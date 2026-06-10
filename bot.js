@@ -125,13 +125,13 @@ client.on('interactionCreate', async interaction => {
             ctx.beginPath();
             ctx.moveTo(x + r, y);
             ctx.lineTo(x + w - r, y);
-            ctx.arcTo(x + w, y,     x + w, y + r,     r);
+            ctx.arc(x + w - r, y + r, r, 1.5 * Math.PI, 2 * Math.PI);
             ctx.lineTo(x + w, y + h - r);
-            ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+            ctx.arc(x + w - r, y + h - r, r, 0, 0.5 * Math.PI);
             ctx.lineTo(x + r, y + h);
-            ctx.arcTo(x,     y + h, x,     y + h - r, r);
-            ctx.lineTo(x,     y + r);
-            ctx.arcTo(x,     y,     x + r, y,         r);
+            ctx.arc(x + r, y + h - r, r, 0.5 * Math.PI, Math.PI);
+            ctx.lineTo(x, y + r);
+            ctx.arc(x + r, y + r, r, Math.PI, 1.5 * Math.PI);
             ctx.closePath();
         }
 
@@ -285,17 +285,23 @@ client.on('interactionCreate', async interaction => {
 
         // 3. PACKAGE AND SEND (Using streams)
         const pass = new PassThrough();
+        const chunks = [];
 
-        PImage.encodePNGToStream(canvas, pass).then(async () => {
-            const attachment = new AttachmentBuilder(pass, { name: 'chroma-leaderboard.png' });
+        pass.on('data', chunk => chunks.push(chunk));
+
+        pass.on('end', async () => {
+            const buffer = Buffer.concat(chunks);
+            const attachment = new AttachmentBuilder(buffer, { name: 'chroma-leaderboard.png' });
 
             await interaction.editReply({
                 content: "🎨 Here are today's top Chroma results:",
                 files: [attachment]
             });
-        }).catch(err => {
+        });
+
+        PImage.encodePNGToStream(canvas, pass).catch(err => {
             console.error("Image encoding error:", err);
-            interaction.editReply({ content: "Oops, an error occurred while generating the image!" });
+            interaction.editReply({ content: "Oops, an error occurred while saving the image!" });
         });
     }
 });
