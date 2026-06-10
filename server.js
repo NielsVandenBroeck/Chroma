@@ -20,6 +20,19 @@ const express = require('express');
 const cors    = require('cors');
 const db      = require('./db');
 
+const bot = require('./bot.js');
+
+db.init().then(() => {
+    app.listen(PORT, () => {
+        console.log(`[server] Chroma backend listening on :${PORT}`);
+        scheduleMidnightSeed();
+        bot.startBot(); // Boot up the chat bot alongside the API
+    });
+}).catch((err) => {
+    console.error('[server] Failed to init DB:', err);
+    process.exit(1);
+});
+
 const app = express();
 
 app.use((req, res, next) => {
