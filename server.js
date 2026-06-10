@@ -20,16 +20,24 @@ const express = require('express');
 const cors    = require('cors');
 const db      = require('./db');
 
-const app  = express();
+const app = express();
+
 app.use((req, res, next) => {
     res.setHeader(
         "Content-Security-Policy",
-        "frame-ancestors https://*.discordsays.com https://discord.com https://*.discord.com; " +
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-        "font-src 'self' https://fonts.gstatic.com;"
+        [
+            "frame-ancestors https://discord.com https://*.discord.com https://*.discordsays.com",
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "font-src 'self' https://fonts.gstatic.com data:",
+            "img-src 'self' data: https:",
+            "connect-src 'self' https: wss:",
+        ].join("; ")
     );
     next();
 });
+
 const PORT = process.env.PORT || 3000;
 
 // ─── MIDDLEWARE ───────────────────────────────────
