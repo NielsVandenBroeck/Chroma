@@ -203,26 +203,22 @@ client.on('interactionCreate', async interaction => {
 
 function scheduleYesterdayPost() {
     const now = new Date();
-    // Calculate exact target time for 00:05:00 UTC
-    let nextPost = new Date(Date.UTC(
+
+    // Calculate exact target time for 00:00:00 UTC (Next Midnight)
+    const nextPost = new Date(Date.UTC(
         now.getUTCFullYear(),
         now.getUTCMonth(),
-        now.getUTCDate(),
-        0, 5, 0, 0
+        now.getUTCDate() + 1, // Tomorrow
+        0, 0, 0, 0
     ));
-
-    // If 00:05 UTC today has already ticked by, schedule for tomorrow
-    if (now >= nextPost) {
-        nextPost.setUTCDate(nextPost.getUTCDate() + 1);
-    }
 
     const msUntil = nextPost.getTime() - Date.now();
     console.log(`[bot-cron] Next automated leaderboard post in ${Math.round(msUntil / 1000)}s (${nextPost.toISOString()})`);
 
     setTimeout(async () => {
         try {
-            // At 00:05, "yesterday" was exactly 5-6 minutes ago.
-            const yesterdayStr = new Date(Date.now() - 6 * 60 * 1000).toISOString().slice(0, 10);
+            // At exactly 00:00:00, look 1 minute into the past to safely get yesterday's UTC date string
+            const yesterdayStr = new Date(Date.now() - 60 * 1000).toISOString().slice(0, 10);
             const channelId = process.env.DISCORD_LEADERBOARD_CHANNEL_ID;
 
             if (channelId) {
