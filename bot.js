@@ -9,10 +9,9 @@ const {
     Routes,
     SlashCommandBuilder,
     EmbedBuilder,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle
+    AttachmentBuilder,
 } = require('discord.js');
+const { createCanvas } = require('@napi-rs/canvas');
 const db = require('./db'); // Reuse your existing database logic
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -63,48 +62,89 @@ client.on('interactionCreate', async interaction => {
 
     // Command: /chroma
     if (interaction.commandName === 'chroma') {
-        const playButton = new ButtonBuilder()
-            // Directs users to the App profile where they can launch the Activity
-            .setURL(`https://discord.com/application-directory/${process.env.DISCORD_CLIENT_ID}`)
-            .setLabel('Play now!')
-            .setStyle(ButtonStyle.Link);
-
-        const row = new ActionRowBuilder().addComponents(playButton);
-
-        await interaction.reply({
-            content: "🎨 Ready to play Chroma? Click the button below or use the App Launcher (rocket icon) to start!",
-            components: [row]
-        });
+        await interaction.launchActivity();
     }
 
     // Command: /today
     if (interaction.commandName === 'today') {
         const todayUTC = new Date().toISOString().slice(0, 10);
-
-        // Fetch top 50 players sorted by total descending
         const board = db.getLeaderboard(todayUTC);
 
         if (board.length === 0) {
             return interaction.reply({ content: "No one has played Chroma today yet! Be the first! 🔥" });
         }
 
-        // Format leaderboard similarly to the Wordle example
-        let description = `🔥 Here are today's results:\n\n`;
+        // ⏱️ Defer the reply because image generation might take > 3 seconds
+        await interaction.deferReply();
 
-        board.forEach((entry, index) => {
+        // 🎨 CANVAS SETUP
+        // Limit to Top 10 so the image doesn't get ridiculously tall
+        const topPlayers = board.slice(0, 10);
+        const width = 800;
+        const height = 120 + (topPlayers.length * 60); // Dynamic height
+
+        const canvas = createCanvas(width, height);
+        const ctx = canvas.getContext('2d');
+
+        // Draw Background (Discord Dark Theme Color)
+        ctx.fillStyle = '#2B2D31';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw Header Title
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 36px sans-serif';
+        ctx.fillText(`Chroma Leaderboard — ${todayUTC}`, 40, 60);
+
+        // Draw Player Rows
+        topPlayers.forEach((entry, index) => {
+            const y = 140 + (index * 60);
             const rankPrefix = index === 0 ? '👑' : `${index + 1}.`;
-            // Calculate a formatted summary from the scores JSON
-            const scoresSummary = entry.scores.join(' | ');
 
-            description += `${rankPrefix} Score: **${entry.total}** — @${entry.username}\n> Rounds: [ ${scoresSummary} ]\n\n`;
+            // Username
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 24px sans-serif';
+            ctx.fillText(`${rankPrefix} @${entry.username}`, 40, y);
+
+            // Total Score
+            ctx.fillStyle = '#A6A7AB'; // Light grey
+            ctx.font = '24px sans-serif';
+            ctx.fillText(`${entry.total} pts`, 300, y);
+
+            // Draw Score Blocks (Wordle style!)
+            let xOffset = 450;
+            entry.scores.forEach(score => {
+                // Determine block color based on score threshold
+                if (score >= 180) {
+                    ctx.fillStyle = '#43B581'; // Green (Great)
+                } else if (score >= 100) {
+                    ctx.fillStyle = '#FAA61A'; // Yellow/Orange (Okay)
+                } else {
+                    ctx.fillStyle = '#F04747'; // Red (Bad)
+                }
+
+                // Draw rounded rectangle block
+                ctx.beginPath();
+                ctx.roundRect(xOffset, y - 24, 50, 30, 5);
+                ctx.fill();
+
+                // Draw the specific round score text inside the block
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(score.toString(), xOffset + 25, y - 4);
+                ctx.textAlign = 'left'; // Reset alignment
+
+                xOffset += 60; // Space between blocks
+            });
         });
 
-        const embed = new EmbedBuilder()
-            .setTitle(`Chroma Leaderboard - ${todayUTC}`)
-            .setDescription(description)
-            .setColor(0x5865F2);
+        // 📦 PACKAGE AND SEND
+        const attachment = new AttachmentBuilder(canvas.toBuffer('image/png'), { name: 'chroma-leaderboard.png' });
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.editReply({
+            content: "🔥 Here are today's top Chroma results:",
+            files: [attachment]
+        });
     }
 });
 
