@@ -206,7 +206,7 @@ function scheduleYesterdayPost() {
     const now = moment.tz('Europe/Brussels');
 
     // Set target time to exactly 00:10:00 today
-    let nextPost = now.clone().startOf('day').add(10, 'minutes');
+    let nextPost = now.clone().startOf('day').add(14, 'minutes');
 
     // If it is already past 00:10 today, schedule it for 00:10 tomorrow!
     if (now.isAfter(nextPost)) {
