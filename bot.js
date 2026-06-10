@@ -205,16 +205,22 @@ client.on('interactionCreate', async interaction => {
 function scheduleYesterdayPost() {
     const now = moment.tz('Europe/Brussels');
 
-    // Calculate exact target time for the next 00:00:00 in Belgium
-    const nextMidnight = now.clone().add(1, 'days').startOf('day');
-    const msUntil = nextMidnight.diff(now);
+    // Set target time to exactly 00:10:00 today
+    let nextPost = now.clone().startOf('day').add(10, 'minutes');
 
-    console.log(`[bot-cron] Next automated leaderboard post in ${Math.round(msUntil / 1000)}s (${nextMidnight.format()})`);
+    // If it is already past 00:10 today, schedule it for 00:10 tomorrow!
+    if (now.isAfter(nextPost)) {
+        nextPost.add(1, 'days');
+    }
+
+    const msUntil = nextPost.diff(now);
+
+    console.log(`[bot-cron] Next automated leaderboard post in ${Math.round(msUntil / 1000)}s (${nextPost.format()})`);
 
     setTimeout(async () => {
         try {
-            // At exactly midnight, look 1 minute into the past to safely get yesterday's date
-            const yesterdayStr = moment.tz('Europe/Brussels').subtract(1, 'minutes').format('YYYY-MM-DD');
+            // Because we are at 00:10, we safely subtract exactly 1 day to get yesterday's date
+            const yesterdayStr = moment.tz('Europe/Brussels').subtract(1, 'days').format('YYYY-MM-DD');
             const channelId = process.env.DISCORD_LEADERBOARD_CHANNEL_ID;
 
             if (channelId) {
@@ -222,6 +228,8 @@ function scheduleYesterdayPost() {
                 if (channel) {
                     await displayLeaderboard(channel, yesterdayStr, `🏆 **The Final Leaderboard results for ${yesterdayStr} are locked in!**`);
                 }
+            } else {
+                console.log('[bot-cron] Skipping auto-post: DISCORD_LEADERBOARD_CHANNEL_ID missing from environment variables.');
             }
         } catch (err) {
             console.error('[bot-cron] Failed to execute automated post:', err);
