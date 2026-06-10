@@ -35,11 +35,22 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN)
 async function registerCommands() {
     try {
         console.log('[bot] Started refreshing application (/) commands.');
-        await rest.put(
-            Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
-            { body: commands },
-        );
-        console.log('[bot] Successfully reloaded application (/) commands.');
+
+        if (process.env.DISCORD_GUILD_ID) {
+            // ⚡ Guild deployment: Updates INSTANTLY in your test server!
+            await rest.put(
+                Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID),
+                { body: commands },
+            );
+            console.log(`[bot] Successfully reloaded INSTANT GUILD (/) commands for: ${process.env.DISCORD_GUILD_ID}`);
+        } else {
+            // 🌐 Global deployment: Takes up to 1 hour to propagate everywhere
+            await rest.put(
+                Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
+                { body: commands },
+            );
+            console.log('[bot] Successfully reloaded GLOBAL (/) commands. (Can take up to an hour to sync)');
+        }
     } catch (error) {
         console.error('[bot] Error registering commands:', error);
     }
