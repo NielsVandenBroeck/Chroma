@@ -8,15 +8,15 @@ const {
     REST,
     Routes,
     SlashCommandBuilder,
-    EmbedBuilder,
     AttachmentBuilder,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle,
+    ButtonStyle
 } = require('discord.js');
 const PImage = require('pureimage');
 const { PassThrough } = require('stream');
-const db = require('./db'); // Reuse your existing database logic
+const path = require('path');
+const db = require('./db');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -38,185 +38,217 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_BOT_TOKEN)
 async function registerCommands() {
     try {
         console.log('[bot] Started refreshing application (/) commands.');
-
         if (process.env.DISCORD_GUILD_ID) {
-            // ⚡ Guild deployment: Updates INSTANTLY in your test server!
             await rest.put(
                 Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID),
                 { body: commands },
             );
             console.log(`[bot] Successfully reloaded INSTANT GUILD (/) commands for: ${process.env.DISCORD_GUILD_ID}`);
         } else {
-            // 🌐 Global deployment: Takes up to 1 hour to propagate everywhere
             await rest.put(
                 Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
                 { body: commands },
             );
-            console.log('[bot] Successfully reloaded GLOBAL (/) commands. (Can take up to an hour to sync)');
+            console.log('[bot] Successfully reloaded GLOBAL (/) commands.');
         }
     } catch (error) {
         console.error('[bot] Error registering commands:', error);
     }
 }
 
+// ─── SAFE ROUNDED RECTANGLE HELPER ────────────────
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arc(x + w - r, y + r, r, 1.5 * Math.PI, 2 * Math.PI);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arc(x + w - r, y + h - r, r, 0, 0.5 * Math.PI);
+    ctx.lineTo(x + r, y + h);
+    ctx.arc(x + r, y + h - r, r, 0.5 * Math.PI, Math.PI);
+    ctx.lineTo(x, y + r);
+    ctx.arc(x + r, y + r, r, Math.PI, 1.5 * Math.PI);
+    ctx.closePath();
+}
+
+// ─── CORE IMAGE GENERATOR & SENDER ────────────────
+// This handles BOTH the active commands and automated posts dynamically
+async function displayLeaderboard(target, dateStr, messageText) {
+    const board = db.getLeaderboard(dateStr);
+
+    if (board.length === 0) {
+        const fallbackText = `No one played Chroma on ${dateStr}! 😢`;
+        return target.editReply ? target.editReply({ content: fallbackText }) : target.send({ content: fallbackText });
+    }
+
+    try {
+        const dailyColors = db.getTodayColors(dateStr);
+        const fontPath = path.join(__dirname, 'Roboto-Bold.ttf');
+        const font = PImage.registerFont(fontPath, 'Roboto');
+        font.loadSync();
+
+        const topPlayers = board.slice(0, 10);
+        const width = 800;
+        const height = 120 + (topPlayers.length * 60);
+
+        const canvas = PImage.make(width, height);
+        const ctx = canvas.getContext('2d');
+
+        // Draw Background
+        ctx.fillStyle = '#2B2D31';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw Header Title
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '36pt Roboto';
+        ctx.fillText(`Chroma Leaderboard — ${dateStr}`, 40, 60);
+
+        const hsbToRgb = (h, s, b) => {
+            const f = (n, k = (n + h / 60) % 6) => b - b * s * Math.max(Math.min(k, 4 - k, 1), 0);
+            return `rgb(${Math.round(f(5) * 255)}, ${Math.round(f(3) * 255)}, ${Math.round(f(1) * 255)})`;
+        };
+
+        topPlayers.forEach((entry, index) => {
+            const y = 140 + (index * 60);
+            const rankPrefix = `${index + 1}.`;
+            const safeUsername = entry.username.replace(/[^\x20-\x7E]/g, '').trim() || 'Player';
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '24pt Roboto';
+            ctx.fillText(`${rankPrefix} @${safeUsername}`, 40, y);
+
+            ctx.fillStyle = '#A6A7AB';
+            ctx.fillText(`${entry.total} pts`, 300, y);
+
+            let xOffset = 450;
+            entry.scores.forEach((score, roundIndex) => {
+                const targetColor = dailyColors[roundIndex];
+                ctx.fillStyle = hsbToRgb(targetColor.h, targetColor.s, targetColor.b);
+
+                roundRect(ctx, xOffset, y - 24, 50, 30, 5);
+                ctx.fill();
+
+                ctx.fillStyle = targetColor.b > 0.65 ? '#000000' : '#FFFFFF';
+                ctx.font = '14pt Roboto';
+
+                const textX = score.toString().length === 3 ? xOffset + 5 :
+                    score.toString().length === 2 ? xOffset + 12 : xOffset + 18;
+
+                ctx.fillText(score.toString(), textX, y - 4);
+                xOffset += 60;
+            });
+        });
+
+        const pass = new PassThrough();
+        const chunks = [];
+
+        pass.on('data', chunk => chunks.push(chunk));
+        pass.on('end', async () => {
+            const buffer = Buffer.concat(chunks);
+            const attachment = new AttachmentBuilder(buffer, { name: 'chroma-leaderboard.png' });
+
+            const playButton = new ButtonBuilder()
+                .setCustomId('launch_chroma')
+                .setLabel('Play')
+                .setStyle(ButtonStyle.Primary)
+
+            const row = new ActionRowBuilder().addComponents(playButton);
+
+            const payload = { content: messageText, files: [attachment], components: [row] };
+
+            // If target has editReply, it's a command interaction. Otherwise, it's a native channel.
+            if (target.editReply) {
+                await target.editReply(payload);
+            } else {
+                await target.send(payload);
+            }
+        });
+
+        PImage.encodePNGToStream(canvas, pass).catch(err => {
+            console.error("Image encoding error:", err);
+            const errorMsg = "Oops, an error occurred while saving the image!";
+            if (target.editReply) target.editReply({ content: errorMsg });
+        });
+
+    } catch (err) {
+        console.error("General canvas error:", err);
+        const errorMsg = "Oops, an error occurred while preparing the canvas!";
+        if (target.editReply) await target.editReply({ content: errorMsg });
+    }
+}
+
 // ─── EVENT LISTENER ───────────────────────────────
 
 client.on('interactionCreate', async interaction => {
-
-    // ─── 1. BUTTON CLICKS ─────────────────────────
-    if (interaction.isButton()) {
-        if (interaction.customId === 'launch_chroma') {
-            // Instantly launch the activity when the button is clicked!
-            await interaction.launchActivity();
-        }
-        return; // Stop processing so we don't accidentally run slash command code
+    if (interaction.isButton() && interaction.customId === 'launch_chroma') {
+        await interaction.launchActivity();
+        return;
     }
 
-    // ─── 2. SLASH COMMANDS ────────────────────────
     if (interaction.isChatInputCommand()) {
-
-        // Command: /chroma
         if (interaction.commandName === 'chroma') {
             await interaction.launchActivity();
         }
 
-        // Command: /today
         if (interaction.commandName === 'today') {
-            const todayUTC = new Date().toISOString().slice(0, 10);
-            const board = db.getLeaderboard(todayUTC);
-
-            if (board.length === 0) {
-                return interaction.reply({ content: "No one has played Chroma today yet! Be the first! 🔥" });
-            }
-
-            // ⏱️ Defer the reply to give the Pi time to draw the image
             await interaction.deferReply();
-
-            try {
-                // 1. FETCH TODAY'S COLORS & SETUP FONT
-                const dailyColors = db.getTodayColors(todayUTC);
-                // Ensure we are using the bold font we downloaded earlier!
-                const fontPath = require('path').join(__dirname, 'Roboto-Bold.ttf');
-                const font = PImage.registerFont(fontPath, 'Roboto');
-                font.loadSync();
-
-                // 2. CANVAS SETUP
-                const topPlayers = board.slice(0, 10);
-                const width = 800;
-                const height = 120 + (topPlayers.length * 60);
-
-                const canvas = PImage.make(width, height);
-                const ctx = canvas.getContext('2d');
-
-                // Draw Background
-                ctx.fillStyle = '#2B2D31';
-                ctx.fillRect(0, 0, width, height);
-
-                // Draw Header Title
-                ctx.fillStyle = '#FFFFFF';
-                ctx.font = '36pt Roboto';
-                ctx.fillText(`Chroma Leaderboard — ${todayUTC}`, 40, 60);
-
-                // Helper: Convert HSB to CSS RGB string
-                const hsbToRgb = (h, s, b) => {
-                    const f = (n, k = (n + h / 60) % 6) => b - b * s * Math.max(Math.min(k, 4 - k, 1), 0);
-                    return `rgb(${Math.round(f(5) * 255)}, ${Math.round(f(3) * 255)}, ${Math.round(f(1) * 255)})`;
-                };
-
-                // Draw Player Rows
-                topPlayers.forEach((entry, index) => {
-                    const y = 140 + (index * 60);
-                    const rankPrefix = `${index + 1}.`;
-                    const safeUsername = entry.username.replace(/[^\x20-\x7E]/g, '').trim() || 'Player';
-
-                    // Username
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.font = '24pt Roboto';
-                    ctx.fillText(`${rankPrefix} @${safeUsername}`, 40, y);
-
-                    // Total Score
-                    ctx.fillStyle = '#A6A7AB';
-                    ctx.fillText(`${entry.total} pts`, 300, y);
-
-                    // Draw Score Blocks
-                    let xOffset = 450;
-                    entry.scores.forEach((score, roundIndex) => {
-                        const targetColor = dailyColors[roundIndex];
-
-                        ctx.fillStyle = hsbToRgb(targetColor.h, targetColor.s, targetColor.b);
-
-                        // Safely draw rounded rectangles using arcs
-                        ctx.beginPath();
-                        const r = 5;
-                        const bx = xOffset, by = y - 24, bw = 50, bh = 30;
-                        ctx.moveTo(bx + r, by);
-                        ctx.lineTo(bx + bw - r, by);
-                        ctx.arc(bx + bw - r, by + r, r, 1.5 * Math.PI, 2 * Math.PI);
-                        ctx.lineTo(bx + bw, by + bh - r);
-                        ctx.arc(bx + bw - r, by + bh - r, r, 0, 0.5 * Math.PI);
-                        ctx.lineTo(bx + r, by + bh);
-                        ctx.arc(bx + r, by + bh - r, r, 0.5 * Math.PI, Math.PI);
-                        ctx.lineTo(bx, by + r);
-                        ctx.arc(bx + r, by + r, r, Math.PI, 1.5 * Math.PI);
-                        ctx.closePath();
-                        ctx.fill();
-
-                        ctx.fillStyle = targetColor.b > 0.65 ? '#000000' : '#FFFFFF';
-                        ctx.font = '14pt Roboto';
-
-                        const textX = score.toString().length === 3 ? xOffset + 5 :
-                            score.toString().length === 2 ? xOffset + 12 : xOffset + 18;
-
-                        ctx.fillText(score.toString(), textX, y - 4);
-
-                        xOffset += 60;
-                    });
-                });
-
-                // 3. PACKAGE AND SEND
-                const pass = new PassThrough();
-                const chunks = [];
-
-                pass.on('data', chunk => chunks.push(chunk));
-
-                pass.on('end', async () => {
-                    const buffer = Buffer.concat(chunks);
-                    const attachment = new AttachmentBuilder(buffer, { name: 'chroma-leaderboard.png' });
-
-                    // 🎮 CREATE THE PLAY BUTTON
-                    const playButton = new ButtonBuilder()
-                        .setCustomId('launch_chroma')
-                        .setLabel('Play Chroma')
-                        .setStyle(ButtonStyle.Primary)
-                        .setEmoji('🎮');
-
-                    const row = new ActionRowBuilder().addComponents(playButton);
-
-                    // Attach the button row to the final message!
-                    await interaction.editReply({
-                        content: "🎨 Here are today's top Chroma results:",
-                        files: [attachment],
-                        components: [row]
-                    });
-                });
-
-                PImage.encodePNGToStream(canvas, pass).catch(err => {
-                    console.error("Image encoding error:", err);
-                    interaction.editReply({ content: "Oops, an error occurred while saving the image!" });
-                });
-
-            } catch (err) {
-                console.error("General canvas error:", err);
-                await interaction.editReply({ content: "Oops, an error occurred while preparing the canvas!" });
-            }
+            const todayUTC = new Date().toISOString().slice(0, 10);
+            await displayLeaderboard(interaction, todayUTC, "🎨 Here are today's top Chroma results:");
         }
     }
 });
+
+// ─── AUTOMATED RECAP CRON ─────────────────────────
+
+function scheduleYesterdayPost() {
+    const now = new Date();
+    // Calculate exact target time for 00:05:00 UTC
+    let nextPost = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0, 5, 0, 0
+    ));
+
+    // If 00:05 UTC today has already ticked by, schedule for tomorrow
+    if (now >= nextPost) {
+        nextPost.setUTCDate(nextPost.getUTCDate() + 1);
+    }
+
+    const msUntil = nextPost.getTime() - Date.now();
+    console.log(`[bot-cron] Next automated leaderboard post in ${Math.round(msUntil / 1000)}s (${nextPost.toISOString()})`);
+
+    setTimeout(async () => {
+        try {
+            // At 00:05, "yesterday" was exactly 5-6 minutes ago.
+            const yesterdayStr = new Date(Date.now() - 6 * 60 * 1000).toISOString().slice(0, 10);
+            const channelId = process.env.DISCORD_LEADERBOARD_CHANNEL_ID;
+
+            if (channelId) {
+                const channel = await client.channels.fetch(channelId);
+                if (channel) {
+                    await displayLeaderboard(channel, yesterdayStr, `🏆 **The Final Leaderboard results for ${yesterdayStr} are locked in!**`);
+                }
+            } else {
+                console.log('[bot-cron] Skipping auto-post: DISCORD_LEADERBOARD_CHANNEL_ID missing from environment variables.');
+            }
+        } catch (err) {
+            console.error('[bot-cron] Failed to execute automated post:', err);
+        }
+        // Loop the clock back up for the next day
+        scheduleYesterdayPost();
+    }, msUntil);
+}
 
 // ─── STARTUP ──────────────────────────────────────
 
 module.exports.startBot = async () => {
     await registerCommands();
     client.login(process.env.DISCORD_BOT_TOKEN);
-    console.log('[bot] Discord bot initialized and logged in.');
+
+    client.once('ready', () => {
+        console.log('[bot] Discord bot initialized and logged in.');
+        scheduleYesterdayPost(); // Fire up the automated clock routine!
+    });
 };
