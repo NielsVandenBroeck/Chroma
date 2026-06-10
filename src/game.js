@@ -13,6 +13,7 @@
 //   5. POST /api/score → persist result, get leaderboard rank
 //   6. GET /api/leaderboard → show today's full board
 // =====================================================
+let cachedToken = null;
 window.addEventListener('error', (e) => {
     debug('WINDOW ERROR:', e.message);
 });
@@ -441,7 +442,7 @@ async function bootstrap() {
         debug('SDK ready');
 
         // ─── 1. CHECK FOR CACHED TOKEN ──────────────────────────────
-        const storedToken = localStorage.getItem("chroma_access_token");
+        const storedToken = cachedToken
         let isAuthenticated = false;
 
         if (storedToken) {
@@ -452,8 +453,8 @@ async function bootstrap() {
                 isAuthenticated = true;
                 debug('SDK authenticated via cached token!');
             } catch (err) {
+                cachedToken = null;
                 debug('Stored token expired or invalid. Clearing cache.');
-                localStorage.removeItem("chroma_access_token");
             }
         }
 
@@ -489,8 +490,7 @@ async function bootstrap() {
 
             accessToken = tokenData.access_token;
 
-            // Save the new token for next time!
-            localStorage.setItem("chroma_access_token", accessToken);
+            cachedToken = accessToken;
             debug('Token received and cached');
 
             debug('Authenticating SDK');
