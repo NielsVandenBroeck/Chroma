@@ -258,6 +258,8 @@ function submitGuess() {
 async function showFinal() {
     const total = game.scores.reduce((a, b) => a + b, 0);
 
+    debug("Preparing to submit. SDK Channel ID is:", sdk.channelId);
+
     // ── Persist to server ──────────────────────────────
     try {
         // We now include game.guesses in the payload!
