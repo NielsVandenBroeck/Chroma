@@ -84,13 +84,13 @@ async function displayLeaderboard(target, dateStr, messageText) {
     }
 
     try {
-        const dailyColors = db.getTodayColors(dateStr);
         const fontPath = path.join(__dirname, 'Roboto-Bold.ttf');
         const font = PImage.registerFont(fontPath, 'Roboto');
         font.loadSync();
 
         const topPlayers = board.slice(0, 10);
-        const width = 800;
+        // Reduced width since we are no longer drawing the individual round swatches
+        const width = 600;
         const height = 120 + (topPlayers.length * 60);
 
         const canvas = PImage.make(width, height);
@@ -102,43 +102,23 @@ async function displayLeaderboard(target, dateStr, messageText) {
 
         // Draw Header Title
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '36pt Roboto';
-        ctx.fillText(`Chroma Leaderboard — ${dateStr}`, 40, 60);
-
-        const hsbToRgb = (h, s, b) => {
-            const f = (n, k = (n + h / 60) % 6) => b - b * s * Math.max(Math.min(k, 4 - k, 1), 0);
-            return `rgb(${Math.round(f(5) * 255)}, ${Math.round(f(3) * 255)}, ${Math.round(f(1) * 255)})`;
-        };
+        ctx.font = '28pt Roboto';
+        ctx.fillText(`Chroma Leaderboard — ${dateStr}`, 30, 60);
 
         topPlayers.forEach((entry, index) => {
             const y = 140 + (index * 60);
             const rankPrefix = `${index + 1}.`;
             const safeUsername = entry.username.replace(/[^\x20-\x7E]/g, '').trim() || 'Player';
 
+            // Draw Username
             ctx.fillStyle = '#FFFFFF';
             ctx.font = '24pt Roboto';
             ctx.fillText(`${rankPrefix} @${safeUsername}`, 40, y);
 
+            // Draw Overall Score out of 50
             ctx.fillStyle = '#A6A7AB';
-            ctx.fillText(`${entry.total} pts`, 300, y);
-
-            let xOffset = 450;
-            entry.scores.forEach((score, roundIndex) => {
-                const targetColor = dailyColors[roundIndex];
-                ctx.fillStyle = hsbToRgb(targetColor.h, targetColor.s, targetColor.b);
-
-                roundRect(ctx, xOffset, y - 24, 50, 30, 5);
-                ctx.fill();
-
-                ctx.fillStyle = targetColor.b > 0.65 ? '#000000' : '#FFFFFF';
-                ctx.font = '14pt Roboto';
-
-                const textX = score.toString().length === 3 ? xOffset + 5 :
-                    score.toString().length === 2 ? xOffset + 12 : xOffset + 18;
-
-                ctx.fillText(score.toString(), textX, y - 4);
-                xOffset += 60;
-            });
+            const formattedScore = (entry.total / 100).toFixed(2);
+            ctx.fillText(`${formattedScore} / 50`, 420, y);
         });
 
         const pass = new PassThrough();
