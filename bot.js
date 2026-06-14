@@ -12,7 +12,8 @@ const {
     AttachmentBuilder,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    PermissionFlagsBits
 } = require('discord.js');
 const PImage = require('pureimage');
 const { PassThrough } = require('stream');
@@ -29,7 +30,16 @@ const commands = [
         .setDescription('Launch a game of Chroma!'),
     new SlashCommandBuilder()
         .setName('today')
-        .setDescription("See today's Chroma leaderboard results")
+        .setDescription("See today's Chroma leaderboard results"),
+    new SlashCommandBuilder()
+        .setName('reset')
+        .setDescription("Admin only: Wipe a player's score for today so they can test/replay.")
+        .addUserOption(option =>
+            option.setName('player')
+                .setDescription('The player whose score you want to wipe')
+                .setRequired(true)
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 ].map(command => command.toJSON());
 
 // ─── REGISTER COMMANDS ────────────────────────────
@@ -70,7 +80,7 @@ async function displayLeaderboard(target, dateStr, messageText) {
         const topPlayers = board.slice(0, 10);
 
         // Build the text message using Discord Markdown
-        let leaderboardText = `###${messageText}\n Leaderboard - ${dateStr}:\n`;
+        let leaderboardText = `### ${messageText}\n Leaderboard - ${dateStr}:\n`;
 
         topPlayers.forEach((entry, index) => {
             // Format score to out of 50
@@ -127,6 +137,26 @@ client.on('interactionCreate', async interaction => {
             await interaction.deferReply();
             const todayLocal = moment.tz('Europe/Brussels').format('YYYY-MM-DD');
             await displayLeaderboard(interaction, todayLocal, "Today's Scores:");
+        }
+        if (interaction.commandName === 'reset') {
+            await interaction.deferReply({ ephemeral: true }); // Make the bot's reply private
+
+            const targetUser = interaction.options.getUser('player');
+            const todayLocal = moment.tz('Europe/Brussels').format('YYYY-MM-DD');
+
+            try {
+                // Call a new db function to delete the score
+                const success = db.deleteScore(todayLocal, targetUser.id);
+
+                if (success) {
+                    await interaction.editReply({ content: `✅ Successfully wiped today's score for <@${targetUser.id}>. They can now refresh and play again!` });
+                } else {
+                    await interaction.editReply({ content: `⚠️ Could not find a score for <@${targetUser.id}> today. They might not have played yet.` });
+                }
+            } catch (err) {
+                console.error('[bot] Error resetting score:', err);
+                await interaction.editReply({ content: `❌ An error occurred while trying to wipe the score.` });
+            }
         }
     }
 });

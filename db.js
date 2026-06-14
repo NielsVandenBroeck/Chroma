@@ -181,6 +181,25 @@ function randomTarget() {
     };
 }
 
+/**
+ * Admin command utility: Wipes a user's score for a specific date.
+ */
+function deleteScore(dateStr, userId) {
+    db.run('DELETE FROM scores WHERE date = ? AND user_id = ?', [dateStr, userId]);
+
+    // sql.js provides this method to check how many rows were affected by the last query
+    const changes = db.getRowsModified();
+
+    if (changes > 0) {
+        flush(); // Save the deletion to the physical .sqlite file!
+        console.log(`[db] Wiped score for user ${userId} on ${dateStr}`);
+        return true;
+    }
+
+    return false;
+}
+
+
 // ─── EXPORTS ──────────────────────────────────────
 
-module.exports = { init, getTodayColors, seedColors, saveScore, getLeaderboard, hasPlayed };
+module.exports = { init, getTodayColors, seedColors, saveScore, getLeaderboard, hasPlayed, deleteScore };
