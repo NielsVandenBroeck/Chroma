@@ -100,6 +100,7 @@ let game = {
 let accessToken = null;  // Discord OAuth2 access token
 let discordUser = null;  // { id, username, avatar }
 let todayDate   = null;  // 'YYYY-MM-DD' string from server
+let sdk         = null;
 
 let pickerH = 180, pickerS = 0.6, pickerB = 0.75;
 let rafId   = null;
@@ -260,7 +261,12 @@ async function showFinal() {
     // ── Persist to server ──────────────────────────────
     try {
         // We now include game.guesses in the payload!
-        await apiPost('/score', { scores: game.scores, guesses: game.guesses, total });
+        await apiPost('/score', {
+            scores: game.scores,
+            guesses: game.guesses,
+            total,
+            channelId: sdk.channelId
+        });
     } catch (err) {
         console.warn('[chroma] Score submit failed:', err.message);
     }
@@ -435,7 +441,7 @@ async function bootstrap() {
         debug('Starting bootstrap');
         debug('Client ID:', DISCORD_CLIENT_ID);
 
-        const sdk = new DiscordSDK(DISCORD_CLIENT_ID);
+        sdk = new DiscordSDK(DISCORD_CLIENT_ID);
 
         debug('SDK created');
         await sdk.ready();
