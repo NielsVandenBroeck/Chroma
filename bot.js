@@ -62,7 +62,7 @@ async function displayLeaderboard(target, dateStr, messageText) {
     const board = db.getLeaderboard(dateStr);
 
     if (board.length === 0) {
-        const fallbackText = `No one played Chroma on ${dateStr}! 😢`;
+        const fallbackText = `No one played Chroma on ${dateStr}...`;
         return target.editReply ? target.editReply({ content: fallbackText }) : target.send({ content: fallbackText });
     }
 
@@ -70,7 +70,7 @@ async function displayLeaderboard(target, dateStr, messageText) {
         const topPlayers = board.slice(0, 10);
 
         // Build the text message using Discord Markdown
-        let leaderboardText = `${messageText}\n\n### 🎨 Chroma Leaderboard — ${dateStr}\n`;
+        let leaderboardText = `###${messageText}\n Leaderboard - ${dateStr}:\n`;
 
         topPlayers.forEach((entry, index) => {
             // Format score to out of 50
@@ -126,7 +126,7 @@ client.on('interactionCreate', async interaction => {
         if (interaction.commandName === 'today') {
             await interaction.deferReply();
             const todayLocal = moment.tz('Europe/Brussels').format('YYYY-MM-DD');
-            await displayLeaderboard(interaction, todayLocal, "Here are today's Chroma results:");
+            await displayLeaderboard(interaction, todayLocal, "Today's Scores:");
         }
     }
 });
@@ -157,7 +157,7 @@ function scheduleYesterdayPost() {
             if (channelId) {
                 const channel = await client.channels.fetch(channelId);
                 if (channel) {
-                    await displayLeaderboard(channel, yesterdayStr, `**The Final Leaderboard results for ${yesterdayStr}:**`);
+                    await displayLeaderboard(channel, yesterdayStr, `The Final Leaderboard results for yesterday:`);
                 }
             } else {
                 console.log('[bot-cron] Skipping auto-post: DISCORD_LEADERBOARD_CHANNEL_ID missing from environment variables.');

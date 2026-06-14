@@ -242,7 +242,7 @@ app.post('/api/score', async (req, res) => {
         if (channelId) {
             bot.sendLeaderboardToChannel(
                 channelId,
-                `**@${user.global_name ?? user.username}** was playing Chroma!`
+                `@${user.global_name ?? user.username} was playing Chroma!`
             );
         }
 
