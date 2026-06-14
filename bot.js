@@ -57,23 +57,6 @@ async function registerCommands() {
     }
 }
 
-// ─── SAFE ROUNDED RECTANGLE HELPER ────────────────
-
-function roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.arc(x + w - r, y + r, r, 1.5 * Math.PI, 2 * Math.PI);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.arc(x + w - r, y + h - r, r, 0, 0.5 * Math.PI);
-    ctx.lineTo(x + r, y + h);
-    ctx.arc(x + r, y + h - r, r, 0.5 * Math.PI, Math.PI);
-    ctx.lineTo(x, y + r);
-    ctx.arc(x + r, y + r, r, Math.PI, 1.5 * Math.PI);
-    ctx.closePath();
-}
-
-// ─── CORE IMAGE GENERATOR & SENDER ────────────────
 // This handles BOTH the active commands and automated posts dynamically
 async function displayLeaderboard(target, dateStr, messageText) {
     const board = db.getLeaderboard(dateStr);
@@ -84,77 +67,45 @@ async function displayLeaderboard(target, dateStr, messageText) {
     }
 
     try {
-        const fontPath = path.join(__dirname, 'Roboto-Bold.ttf');
-        const font = PImage.registerFont(fontPath, 'Roboto');
-        font.loadSync();
-
         const topPlayers = board.slice(0, 10);
-        // Reduced width since we are no longer drawing the individual round swatches
-        const width = 600;
-        const height = 120 + (topPlayers.length * 60);
 
-        const canvas = PImage.make(width, height);
-        const ctx = canvas.getContext('2d');
-
-        // Draw Background
-        ctx.fillStyle = '#2B2D31';
-        ctx.fillRect(0, 0, width, height);
-
-        // Draw Header Title
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '28pt Roboto';
-        ctx.fillText(`Chroma Leaderboard — ${dateStr}`, 30, 60);
+        // Build the text message using Discord Markdown
+        let leaderboardText = `${messageText}\n\n### 🎨 Chroma Leaderboard — ${dateStr}\n`;
 
         topPlayers.forEach((entry, index) => {
-            const y = 140 + (index * 60);
-            const rankPrefix = `${index + 1}.`;
-            const safeUsername = entry.username.replace(/[^\x20-\x7E]/g, '').trim() || 'Player';
-
-            // Draw Username
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = '24pt Roboto';
-            ctx.fillText(`${rankPrefix} @${safeUsername}`, 40, y);
-
-            // Draw Overall Score out of 50
-            ctx.fillStyle = '#A6A7AB';
+            // Format score to out of 50
             const formattedScore = (entry.total / 100).toFixed(2);
-            ctx.fillText(`${formattedScore} / 50`, 420, y);
+
+            // Add medals for the top 3 players
+            let rankIcon = `${index + 1}.`;
+            if (index === 0) rankIcon = '🥇';
+            if (index === 1) rankIcon = '🥈';
+            if (index === 2) rankIcon = '🥉';
+
+            // We use the raw username here because Discord handles custom fonts natively!
+            leaderboardText += `${rankIcon} **@${entry.username}** — ${formattedScore} / 50\n`;
         });
 
-        const pass = new PassThrough();
-        const chunks = [];
+        // Keep the Play button
+        const playButton = new ButtonBuilder()
+            .setCustomId('launch_chroma')
+            .setLabel('Play Chroma')
+            .setStyle(ButtonStyle.Primary);
 
-        pass.on('data', chunk => chunks.push(chunk));
-        pass.on('end', async () => {
-            const buffer = Buffer.concat(chunks);
-            const attachment = new AttachmentBuilder(buffer, { name: 'chroma-leaderboard.png' });
+        const row = new ActionRowBuilder().addComponents(playButton);
 
-            const playButton = new ButtonBuilder()
-                .setCustomId('launch_chroma')
-                .setLabel('Play')
-                .setStyle(ButtonStyle.Primary)
+        const payload = { content: leaderboardText, components: [row] };
 
-            const row = new ActionRowBuilder().addComponents(playButton);
-
-            const payload = { content: messageText, files: [attachment], components: [row] };
-
-            // If target has editReply, it's a command interaction. Otherwise, it's a native channel.
-            if (target.editReply) {
-                await target.editReply(payload);
-            } else {
-                await target.send(payload);
-            }
-        });
-
-        PImage.encodePNGToStream(canvas, pass).catch(err => {
-            console.error("Image encoding error:", err);
-            const errorMsg = "Oops, an error occurred while saving the image!";
-            if (target.editReply) target.editReply({ content: errorMsg });
-        });
+        // If target has editReply, it's a command interaction. Otherwise, it's a native channel.
+        if (target.editReply) {
+            await target.editReply(payload);
+        } else {
+            await target.send(payload);
+        }
 
     } catch (err) {
-        console.error("General canvas error:", err);
-        const errorMsg = "Oops, an error occurred while preparing the canvas!";
+        console.error("Leaderboard posting error:", err);
+        const errorMsg = "Oops, an error occurred while fetching the leaderboard!";
         if (target.editReply) await target.editReply({ content: errorMsg });
     }
 }
