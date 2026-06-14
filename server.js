@@ -209,6 +209,7 @@ app.post('/api/score', async (req, res) => {
     // 1. Extract channelId from the frontend request!
     const { scores, total, channelId } = req.body;
 
+    console.log(`[score] Score submitted. channelId received from frontend:`, channelId);
     if (!validateScores(scores)) {
         return res.status(400).json({ error: 'Invalid scores array' });
     }
@@ -332,15 +333,3 @@ function extractBearer(req) {
     if (!h || !h.startsWith('Bearer ')) return null;
     return h.slice(7);
 }
-
-// ─── STARTUP ──────────────────────────────────────
-
-db.init().then(() => {
-    app.listen(PORT, () => {
-        console.log(`[server] Chroma backend listening on :${PORT}`);
-        scheduleMidnightSeed();
-    });
-}).catch((err) => {
-    console.error('[server] Failed to init DB:', err);
-    process.exit(1);
-});

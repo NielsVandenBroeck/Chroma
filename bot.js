@@ -13,7 +13,8 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    PermissionFlagsBits
+    PermissionFlagsBits,
+    MessageFlags
 } = require('discord.js');
 const PImage = require('pureimage');
 const { PassThrough } = require('stream');
@@ -80,7 +81,7 @@ async function displayLeaderboard(target, dateStr, messageText) {
         const topPlayers = board.slice(0, 10);
 
         // Build the text message using Discord Markdown
-        let leaderboardText = `### ${messageText}\n Leaderboard - ${dateStr}:\n`;
+        let leaderboardText = `### ${messageText}\n ### Leaderboard - ${dateStr}:\n`;
 
         topPlayers.forEach((entry, index) => {
             // Format score to out of 50
@@ -139,7 +140,7 @@ client.on('interactionCreate', async interaction => {
             await displayLeaderboard(interaction, todayLocal, "Today's Scores:");
         }
         if (interaction.commandName === 'reset') {
-            await interaction.deferReply({ ephemeral: true }); // Make the bot's reply private
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
             const targetUser = interaction.options.getUser('player');
             const todayLocal = moment.tz('Europe/Brussels').format('YYYY-MM-DD');
