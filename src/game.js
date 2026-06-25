@@ -37,8 +37,7 @@ function debug(...args) {
     el.appendChild(line);
 }
 
-import { DiscordSDK } from "@discord/embedded-app-sdk";
-
+import { DiscordSDK } from "https://esm.sh/@discord/embedded-app-sdk";
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 
 // Set this to your deployed backend URL.
