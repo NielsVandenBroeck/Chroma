@@ -17,7 +17,7 @@
 //   7. GET /api/flagle/leaderboard → show board with flag
 // =====================================================
 
-import { DiscordSDK } from "https://esm.sh/@discord/embedded-app-sdk";
+import { DiscordSDK } from "@discord/embedded-app-sdk";
 
 // ─── CONFIG ───────────────────────────────────────
 

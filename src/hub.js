@@ -1,4 +1,4 @@
-import { DiscordSDK } from "https://esm.sh/@discord/embedded-app-sdk";
+import { DiscordSDK } from "@discord/embedded-app-sdk";
 
 // Use the same Client ID from your other game files
 const DISCORD_CLIENT_ID = '1513482392503980063';
