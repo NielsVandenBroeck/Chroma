@@ -7,6 +7,7 @@ module.exports = {
 
     // 1. Multiple Entry Points: Tell Webpack about both games
     entry: {
+        hub: "./src/hub.js",
         chroma: "./src/game.js",
         flagle: "./src/flagle-game.js"
     },
@@ -23,7 +24,7 @@ module.exports = {
         new HtmlWebpackPlugin({
             template: './public/index.html',
             filename: 'index.html',
-            chunks: [] // No JavaScript needed for the pure HTML/CSS menu
+            chunks: ['hub']
         }),
 
         // 4. Chroma Game
