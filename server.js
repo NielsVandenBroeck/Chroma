@@ -1,16 +1,22 @@
 // =====================================================
-// server.js — Chroma Discord Activity Backend
+// server.js — Chroma + Flagle Discord Activity Backend
 // =====================================================
 // Discord Activities run inside an iframe on discord.com.
 // The client SDK gives us a short-lived `code` which we
 // exchange for an access_token here (server-side, so our
 // client_secret never leaves this process).
 //
-// Endpoints
+// Chroma Endpoints:
 //   POST /api/token           — Discord OAuth2 token exchange
 //   GET  /api/daily           — Today's colors + played status
-//   POST /api/score           — Submit completed game score
-//   GET  /api/leaderboard     — Today's leaderboard (top 50)
+//   POST /api/score           — Submit completed Chroma game score
+//   GET  /api/leaderboard     — Today's Chroma leaderboard (top 50)
+//
+// Flagle Endpoints:
+//   GET  /api/flagle/daily    — Today's flag + played status
+//   POST /api/flagle/score    — Submit completed Flagle score
+//   GET  /api/flagle/leaderboard — Today's Flagle leaderboard (top 50)
+//
 //   GET  /api/ping            — Health check
 // =====================================================
 
@@ -20,19 +26,9 @@ const path = require('path');
 const express = require('express');
 const cors    = require('cors');
 const db      = require('./db');
+const { FLAGS } = require('./flag-data');
 
 const bot = require('./bot.js');
-
-db.init().then(() => {
-    app.listen(PORT, () => {
-        console.log(`[server] Chroma backend listening on :${PORT}`);
-        scheduleMidnightSeed();
-        bot.startBot(); // Boot up the chat bot alongside the API
-    });
-}).catch((err) => {
-    console.error('[server] Failed to init DB:', err);
-    process.exit(1);
-});
 
 const app = express();
 
@@ -57,8 +53,6 @@ const PORT = process.env.PORT || 3000;
 // ─── MIDDLEWARE ───────────────────────────────────
 
 app.use(cors({
-    // In production, lock this down to your Activity's origin:
-    // origin: `https://${process.env.DISCORD_CLIENT_ID}.discordsays.com`
     origin: true,
     credentials: true,
 }));
@@ -68,16 +62,27 @@ app.use(express.static(path.join(__dirname, 'dist')));
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
+
+db.init().then(() => {
+    app.listen(PORT, () => {
+        console.log(`[server] Chroma + Flagle backend listening on :${PORT}`);
+        scheduleMidnightSeed();
+        bot.startBot(); // Boot up the chat bot alongside the API
+    });
+}).catch((err) => {
+    console.error('[server] Failed to init DB:', err);
+    process.exit(1);
+});
+
 // ─── HELPERS ──────────────────────────────────────
 
-/** Today's date string in UTC, e.g. '2024-06-08' */
+/** Today's date string in Belgium timezone */
 function todayUTC() {
     return moment.tz('Europe/Brussels').format('YYYY-MM-DD');
 }
 
 /**
  * Fetch the Discord user associated with an access_token.
- * Returns { id, username, global_name, avatar } or throws.
  */
 async function fetchDiscordUser(accessToken) {
     const res = await fetch('https://discord.com/api/v10/users/@me', {
@@ -91,8 +96,7 @@ async function fetchDiscordUser(accessToken) {
 }
 
 /**
- * Validate that a submitted score array is plausible.
- * Prevents clients from sending fake scores.
+ * Validate Chroma scores array.
  */
 function validateScores(scores) {
     if (!Array.isArray(scores) || scores.length !== 5) return false;
@@ -101,11 +105,55 @@ function validateScores(scores) {
     );
 }
 
-// ─── ROUTES ───────────────────────────────────────
+/**
+ * Validate Flagle scores array (1 score per guessable color group, up to 3).
+ */
+function validateFlagleScores(scores) {
+    if (!Array.isArray(scores) || scores.length < 1 || scores.length > 3) return false;
+    return scores.every(
+        (s) => typeof s === 'number' && Number.isFinite(s) && s >= 0 && s <= 1000
+    );
+}
+
+function extractBearer(req) {
+    const h = req.headers.authorization;
+    if (!h || !h.startsWith('Bearer ')) return null;
+    return h.slice(7);
+}
+
+
+// ─── COLOR MATH (server-side, mirrors client) ─────
+
+function hsbToRgb(h, s, b) {
+    const c = b * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = b - c;
+    let r = 0, g = 0, bl = 0;
+    if      (h < 60)  { r = c; g = x;  bl = 0;  }
+    else if (h < 120) { r = x; g = c;  bl = 0;  }
+    else if (h < 180) { r = 0; g = c;  bl = x;  }
+    else if (h < 240) { r = 0; g = x;  bl = c;  }
+    else if (h < 300) { r = x; g = 0;  bl = c;  }
+    else              { r = c; g = 0;  bl = x;  }
+    return { r: (r + m) * 255, g: (g + m) * 255, b: (bl + m) * 255 };
+}
+
+function rgbDistanceHsb(h1, s1, b1, h2, s2, b2) {
+    const a = hsbToRgb(h1, s1, b1);
+    const z = hsbToRgb(h2, s2, b2);
+    return Math.sqrt((a.r - z.r) ** 2 + (a.g - z.g) ** 2 + (a.b - z.b) ** 2);
+}
+
+const MAX_RGB_DIST = Math.sqrt(3 * 255 * 255);
+
+function calcFlagleScore(dist) {
+    return Math.max(0, Math.round((1 - dist / MAX_RGB_DIST) * 1000));
+}
+
+// ─── SHARED ROUTES ────────────────────────────────
 
 /**
  * GET /api/ping
- * Simple health check — useful for uptime monitors.
  */
 app.get('/api/ping', (_req, res) => {
     res.json({ ok: true, ts: new Date().toISOString() });
@@ -113,13 +161,6 @@ app.get('/api/ping', (_req, res) => {
 
 /**
  * POST /api/token
- * Body: { code: string }
- *
- * Discord's Embedded App SDK gives the client a one-time `code`.
- * We exchange it here (keeping client_secret server-side) and
- * return the access_token to the client so it can auth API calls.
- *
- * See: https://discord.com/developers/docs/activities/sdk-guide
  */
 app.post('/api/token', async (req, res) => {
     const { code } = req.body;
@@ -146,8 +187,6 @@ app.post('/api/token', async (req, res) => {
         }
 
         const tokenData = await tokenRes.json();
-
-        // Return only what the client needs
         res.json({ access_token: tokenData.access_token });
     } catch (err) {
         console.error('[token] Unexpected error:', err);
@@ -155,15 +194,10 @@ app.post('/api/token', async (req, res) => {
     }
 });
 
+// ─── CHROMA ROUTES ────────────────────────────────
+
 /**
  * GET /api/daily
- * Header: Authorization: Bearer <discord_access_token>
- *
- * Returns today's 5 colors (seeding them if this is the day's
- * first request) plus whether this user has already played.
- *
- * If already played, their previous scores are included so the
- * client can jump straight to the final screen.
  */
 app.get('/api/daily', async (req, res) => {
     const token = extractBearer(req);
@@ -177,9 +211,9 @@ app.get('/api/daily', async (req, res) => {
 
         res.json({
             date:       dateStr,
-            colors,          // Always return colors so client can pre-load
+            colors,
             alreadyPlayed:   !!played,
-            previousResult:  played ?? null,  // { total, scores } if played
+            previousResult:  played ?? null,
             user: {
                 id:       user.id,
                 username: user.global_name ?? user.username,
@@ -194,19 +228,11 @@ app.get('/api/daily', async (req, res) => {
 
 /**
  * POST /api/score
- * Header: Authorization: Bearer <discord_access_token>
- * Body:   { scores: number[5], total: number }
- *
- * Validates the submission server-side (scores must be 0–1000 each,
- * total must match sum) then persists it.
- *
- * Returns 409 if the user already submitted today.
  */
 app.post('/api/score', async (req, res) => {
     const token = extractBearer(req);
     if (!token) return res.status(401).json({ error: 'Unauthorised' });
 
-    // 1. Extract channelId from the frontend request!
     const { scores, total, channelId } = req.body;
 
     console.log(`[score] Score submitted. channelId received from frontend:`, channelId);
@@ -239,7 +265,6 @@ app.post('/api/score', async (req, res) => {
             });
         }
 
-        // 2. TRIGGER THE BOT TO POST IN CHAT!
         if (channelId) {
             bot.sendLeaderboardToChannel(
                 channelId,
@@ -259,16 +284,11 @@ app.post('/api/score', async (req, res) => {
 
 /**
  * GET /api/leaderboard
- * Header: Authorization: Bearer <discord_access_token>
- * Query:  ?date=YYYY-MM-DD  (optional, defaults to today)
- *
- * Returns the top 50 players for the given day.
  */
 app.get('/api/leaderboard', async (req, res) => {
     const token = extractBearer(req);
     if (!token) return res.status(401).json({ error: 'Unauthorised' });
 
-    // Validate optional date param
     const dateStr = typeof req.query.date === 'string'
         ? req.query.date
         : todayUTC();
@@ -278,7 +298,6 @@ app.get('/api/leaderboard', async (req, res) => {
     }
 
     try {
-        // Still auth the user so we can mark their own row
         const user  = await fetchDiscordUser(token);
         const board = db.getLeaderboard(dateStr);
 
@@ -300,36 +319,222 @@ app.get('/api/leaderboard', async (req, res) => {
     }
 });
 
+// ─── FLAGLE ROUTES ────────────────────────────────
+
+/**
+ * GET /api/flagle/daily
+ * Returns today's flag definition + whether this user has already played.
+ * The flag's guessable colors are returned without their target values
+ * until the user has submitted, to prevent cheating.
+ */
+app.get('/api/flagle/daily', async (req, res) => {
+    const token = extractBearer(req);
+    if (!token) return res.status(401).json({ error: 'Unauthorised' });
+
+    try {
+        const user    = await fetchDiscordUser(token);
+        const dateStr = todayUTC();
+        const flagIndex = db.getTodayFlagIndex(dateStr, FLAGS.length);
+        const flag    = FLAGS[flagIndex];
+        const played  = db.hasFlaglePlayed(dateStr, user.id);
+
+        // Separate guessable and pre-filled groups
+        const guessableGroups = flag.colorGroups.filter(g => g.isGuessable);
+        const prefilledGroups = flag.colorGroups.filter(g => !g.isGuessable);
+
+        // Build the response — strip target colors from guessable groups unless already played
+        const responseGroups = flag.colorGroups.map(group => ({
+            id:          group.id,
+            label:       group.label,
+            isGuessable: group.isGuessable,
+            paths:       group.paths,
+            // Only reveal the target color if pre-filled (already visible) or already played
+            color:       (!group.isGuessable || !!played) ? group.color : null,
+        }));
+
+        res.json({
+            date:          dateStr,
+            flagIndex,
+            flagName:      flag.name,
+            viewBox:       flag.viewBox,
+            colorGroups:   responseGroups,
+            guessableCount: guessableGroups.length,
+            alreadyPlayed:  !!played,
+            previousResult: played ?? null,
+            user: {
+                id:       user.id,
+                username: user.global_name ?? user.username,
+                avatar:   user.avatar,
+            },
+        });
+    } catch (err) {
+        console.error('[flagle/daily] Error:', err.message);
+        res.status(502).json({ error: 'Failed to fetch user from Discord' });
+    }
+});
+
+/**
+ * POST /api/flagle/score
+ * Header: Authorization: Bearer <discord_access_token>
+ * Body: { guesses: [{h,s,b}], channelId?: string }
+ *
+ * The client sends its raw HSB guesses (NOT scores).
+ * We score them here server-side against the real target colors,
+ * so clients can never fake a perfect score.
+ */
+app.post('/api/flagle/score', async (req, res) => {
+    const token = extractBearer(req);
+    if (!token) return res.status(401).json({ error: 'Unauthorised' });
+
+    const { guesses, channelId } = req.body;
+
+    // Basic shape validation
+    if (!Array.isArray(guesses) || guesses.length < 1 || guesses.length > 3) {
+        return res.status(400).json({ error: 'Invalid guesses array' });
+    }
+    for (const g of guesses) {
+        if (typeof g.h !== 'number' || typeof g.s !== 'number' || typeof g.b !== 'number') {
+            return res.status(400).json({ error: 'Each guess must have h, s, b numbers' });
+        }
+    }
+
+    try {
+        const user      = await fetchDiscordUser(token);
+        const dateStr   = todayUTC();
+        const flagIndex = db.getTodayFlagIndex(dateStr, FLAGS.length);
+        const flag      = FLAGS[flagIndex];
+
+        // Get only the guessable color groups (same order client used)
+        const guessableGroups = flag.colorGroups.filter(g => g.isGuessable);
+
+        if (guesses.length !== guessableGroups.length) {
+            return res.status(400).json({
+                error: `Expected ${guessableGroups.length} guesses for this flag, got ${guesses.length}`
+            });
+        }
+
+        // Score each guess against its target color (server-side, cannot be faked)
+        const scores = guessableGroups.map((group, i) => {
+            const target = group.color;
+            const guess  = guesses[i];
+            const dist   = rgbDistanceHsb(target.h, target.s, target.b, guess.h, guess.s, guess.b);
+            return calcFlagleScore(dist);
+        });
+
+        const total = scores.reduce((a, b) => a + b, 0);
+
+        const result = db.saveFlagleScore({
+            dateStr,
+            userId:   user.id,
+            username: user.global_name ?? user.username,
+            avatar:   user.avatar ?? null,
+            flagName: flag.name,
+            scores,
+            total,
+        });
+
+        if (!result.inserted) {
+            return res.status(409).json({
+                error:    'Already submitted today',
+                existing: result.existing,
+            });
+        }
+
+        if (channelId) {
+            bot.sendFlagleLeaderboardToChannel(
+                channelId,
+                `@${user.global_name ?? user.username} guessed today's Flagle flag!`
+            );
+        }
+
+        const board = db.getFlagleLeaderboard(dateStr);
+        const rank  = board.findIndex((r) => r.userId === user.id) + 1;
+
+        // Return scores AND the revealed color groups so the client can show the reveal
+        const revealedGroups = flag.colorGroups.map(group => ({
+            id:          group.id,
+            label:       group.label,
+            isGuessable: group.isGuessable,
+            paths:       group.paths,
+            color:       group.color, // Now revealed for all groups
+        }));
+
+        res.json({
+            ok: true,
+            scores,
+            total,
+            rank,
+            totalPlayers: board.length,
+            flagName: flag.name,
+            colorGroups: revealedGroups,
+        });
+    } catch (err) {
+        console.error('[flagle/score] Error:', err.message);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
+ * GET /api/flagle/leaderboard
+ * Query: ?date=YYYY-MM-DD (optional)
+ */
+app.get('/api/flagle/leaderboard', async (req, res) => {
+    const token = extractBearer(req);
+    if (!token) return res.status(401).json({ error: 'Unauthorised' });
+
+    const dateStr = typeof req.query.date === 'string'
+        ? req.query.date
+        : todayUTC();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        return res.status(400).json({ error: 'Invalid date format' });
+    }
+
+    try {
+        const user  = await fetchDiscordUser(token);
+        const board = db.getFlagleLeaderboard(dateStr);
+
+        // Also send the flag name so the leaderboard can show "Today's flag: France"
+        const flagIndex = db.getTodayFlagIndex(dateStr, FLAGS.length);
+        const flagName  = FLAGS[flagIndex]?.name ?? 'Unknown';
+
+        res.json({
+            date:    dateStr,
+            flagName,
+            board: board.map((r, i) => ({
+                rank:     i + 1,
+                userId:   r.userId,
+                username: r.username,
+                avatar:   r.avatar,
+                total:    r.total,
+                scores:   r.scores,
+                isMe:     r.userId === user.id,
+            })),
+        });
+    } catch (err) {
+        console.error('[flagle/leaderboard] Error:', err.message);
+        res.status(502).json({ error: 'Failed to fetch user from Discord' });
+    }
+});
+
 // ─── MIDNIGHT SEED CRON ───────────────────────────
-// No external cron library needed — we schedule the
-// next midnight ourselves using a recursive setTimeout.
-// This seeds colors at 00:00:00 UTC so they're ready
-// before any player hits /api/daily.
 
 function scheduleMidnightSeed() {
     const now = moment.tz('Europe/Brussels');
-
-    // Calculate exact target time for the next 00:00:00 in Belgium
     const nextMidnight = now.clone().add(1, 'days').startOf('day');
     const msUntil = nextMidnight.diff(now);
 
     console.log(`[cron] Next seed in ${Math.round(msUntil / 1000)}s (${nextMidnight.format()})`);
 
     setTimeout(() => {
-        const dateStr = todayUTC(); // Grabs the fresh new day in Belgium
+        const dateStr = todayUTC();
         try {
             db.seedColors(dateStr);
+            db.seedFlagIndex(dateStr, FLAGS.length);
             console.log(`[cron] Midnight seed complete for ${dateStr}`);
         } catch (err) {
             console.error('[cron] Seed failed:', err);
         }
-        scheduleMidnightSeed(); // schedule the next one
+        scheduleMidnightSeed();
     }, msUntil);
-}
-// ─── UTILITY ──────────────────────────────────────
-
-function extractBearer(req) {
-    const h = req.headers.authorization;
-    if (!h || !h.startsWith('Bearer ')) return null;
-    return h.slice(7);
 }

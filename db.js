@@ -29,7 +29,7 @@ async function init() {
         db = new SQL.Database();
     }
 
-    // Create tables if they don't exist yet
+    // ─── CHROMA TABLES ────────────────────────────
     db.run(`
         CREATE TABLE IF NOT EXISTS daily_colors (
             date        TEXT PRIMARY KEY,   -- 'YYYY-MM-DD'
@@ -51,6 +51,31 @@ async function init() {
         )
     `);
 
+    // ─── FLAGLE TABLES ────────────────────────────
+    // Which flag is shown each day
+    db.run(`
+        CREATE TABLE IF NOT EXISTS daily_flags (
+            date        TEXT PRIMARY KEY,   -- 'YYYY-MM-DD'
+            flag_index  INTEGER NOT NULL    -- Index into the FLAGS array
+        )
+    `);
+
+    // Flagle scores — one row per user per day
+    db.run(`
+        CREATE TABLE IF NOT EXISTS flagle_scores (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            date        TEXT    NOT NULL,
+            user_id     TEXT    NOT NULL,
+            username    TEXT    NOT NULL,
+            avatar      TEXT,
+            flag_name   TEXT    NOT NULL,   -- Country name for the leaderboard
+            scores_json TEXT    NOT NULL,   -- JSON array of per-color-group scores
+            total       INTEGER NOT NULL,
+            played_at   TEXT    NOT NULL,
+            UNIQUE(date, user_id)
+        )
+    `);
+
     flush();
     console.log('[db] Initialised — DB path:', DB_PATH);
 }
@@ -61,7 +86,7 @@ function flush() {
     fs.writeFileSync(DB_PATH, Buffer.from(data));
 }
 
-// ─── DAILY COLORS ─────────────────────────────────
+// ─── DAILY COLORS (CHROMA) ────────────────────────
 
 /** Return today's colors, seeding them if this is the first request today */
 function getTodayColors(dateStr) {
@@ -97,15 +122,131 @@ function seedColors(dateStr) {
     return colors;
 }
 
-// ─── SCORES ───────────────────────────────────────
+// ─── DAILY FLAG (FLAGLE) ──────────────────────────
+
+/** Return today's flag index, seeding it if needed */
+function getTodayFlagIndex(dateStr, totalFlags) {
+    const stmt = db.prepare('SELECT flag_index FROM daily_flags WHERE date = ?');
+    stmt.bind([dateStr]);
+    if (stmt.step()) {
+        const row = stmt.getAsObject();
+        stmt.free();
+        return row.flag_index;
+    }
+    stmt.free();
+    return seedFlagIndex(dateStr, totalFlags);
+}
+
+/** Force-seed a flag index for a specific date */
+function seedFlagIndex(dateStr, totalFlags) {
+    // Use a deterministic index based on the date so everyone gets the same flag
+    // but it cycles through all flags over time
+    const dateSeed = dateStr.replace(/-/g, '');
+    const index = parseInt(dateSeed, 10) % totalFlags;
+
+    db.run(
+        'INSERT OR REPLACE INTO daily_flags (date, flag_index) VALUES (?, ?)',
+        [dateStr, index]
+    );
+    flush();
+    console.log(`[db] Seeded flag index ${index} for ${dateStr}`);
+    return index;
+}
+
+// ─── FLAGLE SCORES ────────────────────────────────
 
 /**
- * Save a user's completed game.
+ * Save a user's Flagle result.
+ * Returns { inserted: true } or { inserted: false, existing }
+ */
+function saveFlagleScore({ dateStr, userId, username, avatar, flagName, scores, total }) {
+    const check = db.prepare(
+        'SELECT total, scores_json, played_at FROM flagle_scores WHERE date = ? AND user_id = ?'
+    );
+    check.bind([dateStr, userId]);
+    if (check.step()) {
+        const existing = check.getAsObject();
+        check.free();
+        return { inserted: false, existing };
+    }
+    check.free();
+
+    db.run(
+        `INSERT INTO flagle_scores (date, user_id, username, avatar, flag_name, scores_json, total, played_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [dateStr, userId, username, avatar ?? null, flagName,
+            JSON.stringify(scores), total, new Date().toISOString()]
+    );
+    flush();
+    return { inserted: true };
+}
+
+/**
+ * Has a specific user already submitted a Flagle today?
+ */
+function hasFlaglePlayed(dateStr, userId) {
+    const stmt = db.prepare(
+        'SELECT total, scores_json, flag_name FROM flagle_scores WHERE date = ? AND user_id = ?'
+    );
+    stmt.bind([dateStr, userId]);
+    const played = stmt.step();
+    const row    = played ? stmt.getAsObject() : null;
+    stmt.free();
+    if (!row) return null;
+    return { total: row.total, scores: JSON.parse(row.scores_json), flagName: row.flag_name };
+}
+
+/**
+ * Flagle leaderboard for a given day — top 50, sorted by total desc.
+ */
+function getFlagleLeaderboard(dateStr) {
+    const stmt = db.prepare(`
+        SELECT user_id, username, avatar, total, scores_json, flag_name, played_at
+        FROM   flagle_scores
+        WHERE  date = ?
+        ORDER  BY total DESC
+        LIMIT  50
+    `);
+    stmt.bind([dateStr]);
+
+    const rows = [];
+    while (stmt.step()) {
+        const r = stmt.getAsObject();
+        rows.push({
+            userId:   r.user_id,
+            username: r.username,
+            avatar:   r.avatar,
+            total:    r.total,
+            scores:   JSON.parse(r.scores_json),
+            flagName: r.flag_name,
+            playedAt: r.played_at,
+        });
+    }
+    stmt.free();
+    return rows;
+}
+
+/**
+ * Admin command: wipe a user's Flagle score for a date.
+ */
+function deleteFlagleScore(dateStr, userId) {
+    db.run('DELETE FROM flagle_scores WHERE date = ? AND user_id = ?', [dateStr, userId]);
+    const changes = db.getRowsModified();
+    if (changes > 0) {
+        flush();
+        console.log(`[db] Wiped Flagle score for user ${userId} on ${dateStr}`);
+        return true;
+    }
+    return false;
+}
+
+// ─── CHROMA SCORES ────────────────────────────────
+
+/**
+ * Save a user's completed Chroma game.
  * Returns { inserted: true } or { inserted: false, existing: <score row> }
- * so the caller can decide whether to show "already played" UI.
  */
 function saveScore({ dateStr, userId, username, avatar, scores, total }) {
-    // Check for existing submission
     const check = db.prepare(
         'SELECT total, scores_json, played_at FROM scores WHERE date = ? AND user_id = ?'
     );
@@ -186,20 +327,23 @@ function randomTarget() {
  */
 function deleteScore(dateStr, userId) {
     db.run('DELETE FROM scores WHERE date = ? AND user_id = ?', [dateStr, userId]);
-
-    // sql.js provides this method to check how many rows were affected by the last query
     const changes = db.getRowsModified();
-
     if (changes > 0) {
-        flush(); // Save the deletion to the physical .sqlite file!
+        flush();
         console.log(`[db] Wiped score for user ${userId} on ${dateStr}`);
         return true;
     }
-
     return false;
 }
 
 
 // ─── EXPORTS ──────────────────────────────────────
 
-module.exports = { init, getTodayColors, seedColors, saveScore, getLeaderboard, hasPlayed, deleteScore };
+module.exports = {
+    init,
+    // Chroma
+    getTodayColors, seedColors, saveScore, getLeaderboard, hasPlayed, deleteScore,
+    // Flagle
+    getTodayFlagIndex, seedFlagIndex, saveFlagleScore, hasFlaglePlayed,
+    getFlagleLeaderboard, deleteFlagleScore,
+};
