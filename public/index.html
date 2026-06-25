@@ -3,165 +3,34 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chroma</title>
-    <!--
-        Discord Activities require these CSP headers.
-        Set them on your server, or keep them here as meta tags.
-        Replace YOUR_CLIENT_ID with your Discord Application ID.
-    -->
-<!--    <link rel="preconnect" href="https://fonts.googleapis.com">-->
-<!--    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>-->
-<!--    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">-->
+    <title>Game Hub</title>
     <link rel="stylesheet" href="style.css" />
+    <style>
+        /* Force the menu to show immediately without JS */
+        #menu-screen { opacity: 1; pointer-events: all; transform: translateY(0); }
+        .hub-buttons { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; width: 100%; }
+        .hub-title { font-size: 42px; line-height: 1; letter-spacing: -0.02em; font-weight: 700; margin-top: 10px; }
+    </style>
 </head>
 <body>
 <div id="app">
-    <!-- ── LOADING ────────────────────────────────── -->
-    <!-- Shown while Discord SDK auth is in progress  -->
-    <div id="loading-screen" class="screen active">
-        <div class="loading-inner">
-            <div class="brand-dots loading-dots">
-                <span class="bdot" style="--c:#FF6B6B; --i:0"></span>
-                <span class="bdot" style="--c:#FFD93D; --i:1"></span>
-                <span class="bdot" style="--c:#6BCB77; --i:2"></span>
-                <span class="bdot" style="--c:#4D96FF; --i:3"></span>
-                <span class="bdot" style="--c:#C77DFF; --i:4"></span>
-            </div>
-            <p class="loading-label">Connecting…</p>
-        </div>
-        <div id="debug-log"
-             style="
-            margin-top:20px;
-            max-height:300px;
-            overflow:auto;
-            font-family:monospace;
-            font-size:12px;
-            text-align:left;
-            width:90%;
-            border:1px solid #555;
-            padding:10px;">
-        </div>
-    </div>
-
-    <!-- ── START ─────────────────────────────────── -->
-    <div id="start-screen" class="screen">
+    <div id="menu-screen" class="screen active">
         <div class="start-inner">
             <div class="brand-dots">
-                <span class="bdot" style="--c:#FF6B6B"></span>
-                <span class="bdot" style="--c:#FFD93D"></span>
-                <span class="bdot" style="--c:#6BCB77"></span>
-                <span class="bdot" style="--c:#4D96FF"></span>
-                <span class="bdot" style="--c:#C77DFF"></span>
+                <span class="bdot" style="--c:#FF6B6B; --i:0"></span>
+                <span class="bdot" style="--c:#457B9D; --i:1"></span>
+                <span class="bdot" style="--c:#6BCB77; --i:2"></span>
             </div>
-            <h1 class="game-title">Chroma</h1>
-            <p class="game-sub">A color memory game</p>
-            <!-- Player greeting — filled by JS after Discord auth -->
-            <p class="player-greeting" id="player-name-wrap" style="display:none">
-                Hey, <span id="player-name"></span>
-            </p>
-            <div class="rules-list">
-                <div class="rule-item"><span class="rn">01</span>Study the color for 5 seconds</div>
-                <div class="rule-item"><span class="rn">02</span>Recreate it from memory</div>
-                <div class="rule-item"><span class="rn">03</span>Score points for accuracy</div>
-            </div>
-            <button id="btn-play" class="cta-btn">Start</button>
-        </div>
-    </div>
 
-    <!-- ── MEMORIZE ───────────────────────────────── -->
-    <div id="memorize-screen" class="screen">
-        <span class="top-label">Round <span id="mem-round-num">1</span> of 5</span>
-        <div id="mem-swatch"></div>
-        <div class="mem-footer">
-            <p class="mem-hint">Memorise this color</p>
-            <div id="countdown-wrap">
-                <svg id="countdown-svg" viewBox="0 0 100 100">
-                    <circle class="c-bg"   cx="50" cy="50" r="42"/>
-                    <circle class="c-ring" id="c-ring" cx="50" cy="50" r="42"/>
-                </svg>
-                <span id="countdown-num">5</span>
+            <h1 class="hub-title">Daily Games</h1>
+            <p class="game-sub">Choose your challenge</p>
+
+            <div class="hub-buttons">
+                <button onclick="window.location.href='/chroma.html'" class="cta-btn">Play Chroma</button>
+                <button onclick="window.location.href='/flagle.html'" class="cta-btn">Play Flagle</button>
             </div>
         </div>
     </div>
-
-    <!-- ── GUESS ─────────────────────────────────── -->
-    <div id="guess-screen" class="screen">
-        <p class="guess-hint">Recreate the color</p>
-
-        <div id="custom-picker">
-            <div id="sliders-area">
-                <div class="scol">
-                    <span class="slabel">H</span>
-                    <div class="color-track" id="track-hue">
-                        <div class="color-handle" id="handle-hue"></div>
-                    </div>
-                </div>
-                <div class="scol">
-                    <span class="slabel">S</span>
-                    <div class="color-track" id="track-sat">
-                        <div class="color-handle" id="handle-sat"></div>
-                    </div>
-                </div>
-                <div class="scol">
-                    <span class="slabel">B</span>
-                    <div class="color-track" id="track-bri">
-                        <div class="color-handle" id="handle-bri"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="color-preview">
-                <div id="preview-round"><span id="guess-round-num">1</span>/5</div>
-                <div id="active-slider-label"></div>
-                <button id="btn-submit-guess" class="submit-btn" title="Submit guess">
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
-                         stroke="currentColor" stroke-width="2.5"
-                         stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- ── RESULT ────────────────────────────────── -->
-    <div id="result-screen" class="screen">
-        <span class="top-label">Round <span id="res-round-num">1</span> of 5</span>
-
-        <div id="comparison-wrapper">
-            <div class="cmp-col">
-                <span class="cmp-label">Original</span>
-                <div class="cmp-swatch left-swatch" id="orig-swatch"></div>
-                <span class="hsb-stats" id="orig-hsb">H0 S0 B0</span>
-            </div>
-            <div class="cmp-col">
-                <span class="cmp-label">Your guess</span>
-                <div class="cmp-swatch right-swatch" id="guess-swatch"></div>
-                <span class="hsb-stats" id="guess-hsb">H0 S0 B0</span>
-            </div>
-        </div>
-
-        <div class="pts-area">
-            <span class="pts-label">Points earned</span>
-            <div id="round-pts">0</div>
-        </div>
-
-        <button id="btn-continue" class="cta-btn">
-            <span id="btn-continue-text">Next Round</span>
-        </button>
-    </div>
-
-    <!-- ── FINAL ─────────────────────────────────── -->
-    <div id="final-screen" class="screen">
-        <div class="final-inner">
-            <h1 class="results-title">results</h1>
-            <p id="results-sub" class="results-sub">Loading today's results...</p>
-
-            <div id="results-board">
-            </div>
-        </div>
-    </div>
-
 </div>
 </body>
 </html>
