@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Game Hub</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+        /* Force the menu to show immediately without JS */
+        #menu-screen { opacity: 1; pointer-events: all; transform: translateY(0); }
+        .hub-buttons { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; width: 100%; }
+        .hub-title { font-size: 42px; line-height: 1; letter-spacing: -0.02em; font-weight: 700; margin-top: 10px; }
+    </style>
+<script defer src="hub.bundle.js"></script></head>
+<body>
+<div id="app">
+    <div id="menu-screen" class="screen active">
+        <div class="start-inner">
+            <div class="brand-dots">
+                <span class="bdot" style="--c:#FF6B6B; --i:0"></span>
+                <span class="bdot" style="--c:#457B9D; --i:1"></span>
+                <span class="bdot" style="--c:#6BCB77; --i:2"></span>
+            </div>
+
+            <h1 class="hub-title">Daily Games</h1>
+            <p class="game-sub">Choose your challenge</p>
+
+            <div class="hub-buttons">
+                <button onclick="window.location.href='/chroma.html'" class="cta-btn">Play Chroma</button>
+                <button onclick="window.location.href='/flagle.html'" class="cta-btn">Play Flagle</button>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

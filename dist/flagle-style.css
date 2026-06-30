@@ -1,0 +1,251 @@
+/* =====================================================
+   flagle-style.css — Flagle-specific styles
+   Inherits tokens and base styles from style.css
+===================================================== */
+
+/* ─── GAME SCREEN ─────────────────────────────────── */
+
+#flagle-game-screen {
+    gap: 16px;
+    padding: 20px 16px;
+    justify-content: flex-start;
+    padding-top: 60px;          /* room for top-label */
+}
+
+/* The flag display during guessing — takes up most of the screen */
+.flagle-flag-container {
+    width: min(360px, calc(100vw - 40px));
+    height: min(220px, calc((100vw - 40px) * 0.65));
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.07),
+                0 12px 32px rgba(0,0,0,0.6);
+    flex-shrink: 0;
+    background: #1a1a1e;
+}
+
+.flagle-group-hint {
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--fgd);
+    text-align: center;
+}
+
+.flagle-group-hint strong {
+    color: var(--fg);
+    font-weight: 600;
+}
+
+/* ─── PICKER (mirrors the Chroma picker) ──────────── */
+
+#flagle-picker {
+    display: flex;
+    position: relative;
+    width: min(460px, calc(100vw - 40px));
+    height: min(200px, calc(100vh - 380px));
+    min-height: 120px;
+    border-radius: var(--r);
+    overflow: hidden;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6), 0 0 0 1px var(--edge);
+    flex-shrink: 0;
+}
+
+#flagle-sliders-area {
+    display: flex;
+    flex-shrink: 0;
+    width: 90px;
+    height: 100%;
+    position: relative;
+    z-index: 2;
+}
+
+#flagle-color-preview {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 16px;
+    transition: background-color 0.05s linear;
+}
+
+.flagle-round-overlay {
+    position: absolute;
+    top: 16px;
+    left: 106px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    z-index: 10;
+    transition: color 0.1s linear;
+    color: rgba(255,255,255,0.6);
+}
+
+/* ─── RESULT SCREEN ───────────────────────────────── */
+
+#flagle-result-screen {
+    overflow-y: auto;
+    justify-content: flex-start;
+    padding: 20px 16px 32px;
+    align-items: stretch;
+}
+
+.flagle-result-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    max-width: 440px;
+    margin: 0 auto;
+}
+
+.flagle-flag-name {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-align: center;
+    margin-top: 8px;
+}
+
+/* Side-by-side flag comparison */
+.flagle-flag-compare {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    justify-content: center;
+}
+
+.flagle-cmp-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    max-width: 200px;
+}
+
+.flagle-cmp-flag {
+    width: 100%;
+    aspect-ratio: 3/2;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06);
+    background: #1a1a1e;
+}
+
+/* Total score display */
+.flagle-total {
+    font-size: 48px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+}
+
+/* ─── BREAKDOWN BARS ──────────────────────────────── */
+
+.flagle-breakdown {
+    width: 100%;
+    border-top: 1px solid var(--edge);
+    border-bottom: 1px solid var(--edge);
+    padding: 14px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.flagle-brow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.flagle-color-pair {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    min-width: 120px;
+}
+
+.flagle-swatch-pair {
+    display: flex;
+    gap: 2px;
+}
+
+.flagle-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.flagle-group-name {
+    font-size: 10px;
+    color: var(--fgd);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
+}
+
+.flagle-bbar {
+    flex: 1;
+    height: 2px;
+    background: var(--surf2);
+    border-radius: 1px;
+    overflow: hidden;
+}
+
+.flagle-bfill {
+    height: 100%;
+    background: var(--fg);
+    border-radius: 1px;
+    width: 0%;
+    /* transition added by JS after first paint */
+}
+
+.flagle-bscore {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--fg);
+    min-width: 32px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* ─── RANK + LEADERBOARD ──────────────────────────── */
+
+.flagle-rank-text {
+    font-size: 12px;
+    color: var(--fgd);
+    text-align: center;
+}
+
+.flagle-board-title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    align-self: flex-start;
+    margin-top: 4px;
+}
+
+.results-board-inner {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* ─── PLACEHOLDER (grey region animation) ─────────── */
+
+@keyframes flagle-pulse {
+    0%, 100% { opacity: 0.5; }
+    50%       { opacity: 0.8; }
+}
+
+.flagle-flag-container svg path[fill="#3a3a3a"] {
+    animation: flagle-pulse 2s ease-in-out infinite;
+}

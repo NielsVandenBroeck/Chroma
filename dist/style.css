@@ -1,0 +1,608 @@
+/* ===== RESET ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ===== TOKENS ===== */
+:root {
+    --bg:   #080809;
+    --surf: #111113;
+    --surf2:#1a1a1e;
+    --edge: rgba(255,255,255,0.07);
+    --fg:   #eeeae4;
+    --fgd:  rgba(238,234,228,0.4);
+    --r:    14px;
+    --ease: cubic-bezier(0.4,0,0.2,1);
+    --dur:  0.42s;
+}
+
+/* ===== BASE ===== */
+html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    /* NEW: Clean, modern sans-serif system font */
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ===== SCREEN SYSTEM ===== */
+#app { position: relative; width: 100%; height: 100%; }
+
+.screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(14px);
+    transition: opacity var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+.screen.active {
+    opacity: 1;
+    pointer-events: all;
+    transform: translateY(0);
+}
+
+/* ===== SHARED ELEMENTS ===== */
+.top-label {
+    position: absolute;
+    top: 28px;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--fgd);
+}
+
+.cta-btn {
+    background: var(--fg);
+    color: var(--bg);
+    border: none;
+    padding: 13px 44px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    border-radius: 100px;
+    cursor: pointer;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.cta-btn:hover  { transform: scale(1.04); opacity: 0.9; }
+.cta-btn:active { transform: scale(0.96); }
+
+/* =====================================================
+   START SCREEN
+===================================================== */
+.start-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    width: 100%;
+    max-width: 320px;
+    text-align: center;
+}
+
+.brand-dots { display: flex; gap: 8px; }
+
+.bdot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--c);
+    animation: bloop 1.6s ease-in-out infinite;
+}
+.bdot:nth-child(2) { animation-delay: 0.1s; }
+.bdot:nth-child(3) { animation-delay: 0.2s; }
+.bdot:nth-child(4) { animation-delay: 0.3s; }
+.bdot:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes bloop {
+    0%, 70%, 100% { transform: translateY(0); }
+    35%           { transform: translateY(-7px); }
+}
+
+.game-title {
+    font-family: inherit; /* Swaps from serif to your new clean font */
+    font-size: 80px;
+    font-weight: 700; /* Made slightly thicker to look bold and modern */
+    letter-spacing: -0.02em; /* Tighter letter spacing looks better on large clean text */
+    line-height: 1;
+}
+
+/* Find these IDs and change their font-family to 'inherit' too */
+#round-pts, #total-score, .final-rating {
+    font-family: system-ui, -apple-system, sans-serif !important;
+    font-weight: 700 !important;
+}
+
+.game-sub {
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--fgd);
+    margin-top: -12px;
+}
+
+.rules-list {
+    width: 100%;
+    border-top: 1px solid var(--edge);
+    border-bottom: 1px solid var(--edge);
+    padding: 18px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+}
+
+.rule-item {
+    display: flex;
+    gap: 14px;
+    font-size: 11px;
+    color: var(--fgd);
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+}
+
+.rn { font-size: 9px; color: var(--fgd); opacity: 0.5; flex-shrink: 0; padding-top: 1px; }
+
+/* =====================================================
+   MEMORIZE SCREEN
+===================================================== */
+#mem-swatch {
+    width: min(400px, calc(100vw - 64px));
+    height: min(400px, calc(100vw - 64px));
+    border-radius: var(--r);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.05),
+    0 24px 64px rgba(0,0,0,0.6);
+}
+
+.mem-footer {
+    margin-top: 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.mem-hint {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fgd);
+}
+
+/* Countdown ring */
+#countdown-wrap {
+    position: relative;
+    width: 68px; height: 68px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#countdown-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    transform: rotate(-90deg);
+}
+
+.c-bg   { fill: none; stroke: var(--surf2); stroke-width: 5; }
+.c-ring {
+    fill: none;
+    stroke: var(--fg);
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-dasharray: 264;
+    stroke-dashoffset: 0;
+}
+
+#countdown-num {
+    font-size: 24px;
+    font-weight: 400;
+    color: var(--fg);
+    position: relative;
+    z-index: 1;
+}
+
+/* =====================================================
+   GUESS SCREEN
+===================================================== */
+#guess-screen { gap: 18px; }
+
+.guess-hint {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fgd);
+}
+
+/* ── Picker container ── */
+#custom-picker {
+    display: flex;
+    position: relative;
+    width: min(600px, calc(100vw - 48px));
+    height: min(460px, calc(100vh - 210px));
+    border-radius: var(--r);
+    overflow: hidden;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px var(--edge);
+}
+/* ── Slider columns ── */
+#sliders-area {
+    display: flex;
+    background: transparent; /* Removed dark background */
+    flex-shrink: 0;
+    width: 120px; /* Set fixed width for the tightly packed columns */
+    height: 100%;
+    position: relative;
+    z-index: 2; /* Layer above the background */
+}
+
+.scol {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    padding: 0; /* Removed top/bottom padding so tracks hit the edges */
+}
+
+.slabel {
+    display: none; /* Hide the H S B text to match the clean green design */
+}
+
+.color-track {
+    position: relative;
+    flex: 1;
+    width: 100%; /* Stretches to touch neighboring tracks */
+    border-radius: 0; /* Removes the rounded pill shape */
+    cursor: pointer;
+    touch-action: none;
+    overflow: hidden;
+}
+
+.color-handle {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px; height: 20px;
+    background: white;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.95);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.55), 0 0 0 2px rgba(0,0,0,0.12);
+    pointer-events: none;
+}
+
+/* Static hue gradient */
+#track-hue {
+    background: linear-gradient(to top,
+    #ff0000 0%,      /* 0°   - Red */
+    #ffff00 16.67%,  /* 60°  - Yellow */
+    #00ff00 33.33%,  /* 120° - Green */
+    #00ffff 50%,     /* 180° - Cyan */
+    #0000ff 66.67%,  /* 240° - Blue */
+    #ff00ff 83.33%,  /* 300° - Magenta */
+    #ff0000 100%     /* 360° - Back to Red */
+    );
+}
+
+/* ── Preview panel ── */
+#color-preview {
+    position: absolute; /* Forces it to fill the whole container */
+    inset: 0;
+    z-index: 1; /* Stays behind the sliders */
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end; /* Moves button to the bottom right */
+    padding: 24px;
+}
+.submit-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #ffffff; /* Solid white background */
+    border: none; /* Clean edges */
+    color: #000000; /* Makes the SVG icon black */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05); /* Slight shadow + subtle structural ring */
+    transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+
+.submit-btn:hover {
+    transform: scale(1.06);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.submit-btn:active {
+    transform: scale(0.94);
+}
+
+/* =====================================================
+   RESULT SCREEN
+===================================================== */
+#result-screen { gap: 28px; }
+
+#comparison-wrapper {
+    display: flex;
+    position: relative; /* Allows the circle to float above */
+    justify-content: center;
+    gap: 0; /* Snaps the swatches directly together */
+    margin-top: 16px;
+    margin-bottom: 12px;
+}
+
+.cmp-swatch {
+    width: clamp(120px, calc(40vw - 20px), 160px);
+    height: clamp(120px, calc(40vw - 20px), 160px);
+}
+.left-swatch {
+    border-radius: 16px 0 0 16px; /* Flat right edge */
+}
+.right-swatch {
+    border-radius: 0 16px 16px 0; /* Flat left edge */
+}
+
+.cmp-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* This forces the text to center above/below the swatches */
+    justify-content: center;
+}
+
+.cmp-label {
+    font-size: 13px; /* Or whatever your current size is */
+    color: var(--fg);
+    opacity: 0.8;
+    margin-bottom: 12px; /* Adds the breathing room above the color */
+    text-align: center;
+}
+
+.hsb-stats {
+    font-size: 11px;
+    color: var(--fg);
+    opacity: 0.6;
+    margin-top: 12px; /* Adds the breathing room below the color */
+    letter-spacing: 0.05em;
+    font-family: monospace;
+    text-align: center;
+}
+
+.pts-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.pts-label {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--fgd);
+}
+
+#round-pts {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 80px;
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.01em;
+}
+
+/* =====================================================
+   FINAL SCREEN
+===================================================== */
+.final-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    max-width: 420px;
+    width: 100%;
+    text-align: left;
+}
+
+.results-title {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    margin-bottom: 8px;
+    line-height: 1;
+}
+
+.results-sub {
+    font-size: 15px;
+    color: var(--fgd);
+    margin-bottom: 28px;
+    line-height: 1.4;
+}
+
+#results-board {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.result-card {
+    background: var(--surf2);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border: 1px solid transparent;
+}
+
+.result-card.is-me {
+    border-color: #ffffff;
+}
+
+.rc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.rc-user-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rc-rank {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.rc-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #333;
+    object-fit: cover;
+}
+
+.rc-name {
+    font-weight: 700;
+    font-size: 14px;
+    text-transform: uppercase;
+}
+
+.rc-winner-badge {
+    background: white;
+    color: black;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 12px;
+    text-transform: uppercase;
+}
+
+.rc-score-wrap {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.rc-score-max {
+    opacity: 0.5;
+    font-weight: 400;
+}
+
+.rc-swatches {
+    display: flex;
+    width: 100%;
+    height: 60px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.rc-swatch {
+    flex: 1;
+    position: relative;
+}
+
+.rc-swatch-score {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #ffffff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+/* Breakdown table */
+#breakdown {
+    width: 100%;
+    border-top: 1px solid var(--edge);
+    padding-top: 14px;
+    margin-bottom: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.brow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bswatch {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.bbar {
+    flex: 1;
+    height: 2px;
+    background: var(--surf2);
+    border-radius: 1px;
+    overflow: hidden;
+}
+
+.bfill {
+    height: 100%;
+    background: var(--fg);
+    border-radius: 1px;
+    width: 0%;
+    transition: width 0.9s var(--ease);
+}
+
+.bscore {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--fg);
+    min-width: 32px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+#active-slider-label {
+    position: absolute;
+    /* 120px (sliders) + 24px (padding) pushes it exactly past the tracks */
+    left: 144px;
+    bottom: 20px;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.2s var(--ease), color 0.1s linear;
+    pointer-events: none;
+    z-index: 10; /* Ensures it never gets trapped behind anything else */
+}
+
+#preview-round {
+    position: absolute;
+    top: 32px;
+    left: 144px; /* Aligns with the active slider label */
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    z-index: 10;
+    transition: color 0.1s linear;
+}
+
+#preview-brand {
+    position: absolute;
+    top: 32px;
+    right: 32px;
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.5; /* Acts like a watermark */
+    z-index: 10;
+    transition: color 0.1s linear;
+}
