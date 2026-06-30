@@ -109,31 +109,24 @@ let rafId   = null;
 
 const $ = (id) => document.getElementById(id);
 
-const screens = {
-    loading:  $('loading-screen'),
-    start:    $('start-screen'),
-    memorize: $('memorize-screen'),
-    guess:    $('guess-screen'),
-    result:   $('result-screen'),
-    final:    $('final-screen'),
-};
-
-const trackHue  = $('track-hue'),  handleHue = $('handle-hue');
-const trackSat  = $('track-sat'),  handleSat = $('handle-sat');
-const trackBri  = $('track-bri'),  handleBri = $('handle-bri');
-const colorPreview = $('color-preview');
-const ring         = $('c-ring');
-const countdownNum = $('countdown-num');
-const activeLabel  = $('active-slider-label');
-const previewRound = $('preview-round');
-
-// ─── SCREEN SWITCHING ─────────────────────────────────────────────────────────
-
 function show(name) {
+    const screens = {
+        loading:  $('loading-screen'),
+        start:    $('start-screen'),
+        memorize: $('memorize-screen'),
+        guess:    $('guess-screen'),
+        result:   $('result-screen'),
+        final:    $('final-screen'),
+    };
     for (const [key, el] of Object.entries(screens)) {
-        el.classList.toggle('active', key === name);
+        if (el) el.classList.toggle('active', key === name);
     }
 }
+
+// Declare variables using 'let' so we can assign them safely later
+let trackHue, handleHue, trackSat, handleSat, trackBri, handleBri;
+let colorPreview, ring, countdownNum, activeLabel, previewRound;
+let isChromaInitialized = false;
 
 // ─── COLOR PICKER ─────────────────────────────────────────────────────────────
 
@@ -180,10 +173,6 @@ function makeDraggable(track, labelName, onValue) {
         activeLabel.style.opacity = '0';
     });
 }
-
-makeDraggable(trackHue, 'HUE',        (v) => { pickerH = v * 360; });
-makeDraggable(trackSat, 'SATURATION', (v) => { pickerS = v; });
-makeDraggable(trackBri, 'BRIGHTNESS', (v) => { pickerB = v; });
 
 // ─── COUNTDOWN ────────────────────────────────────────────────────────────────
 
@@ -569,22 +558,43 @@ function escHtml(str) {
         .replace(/"/g, '&quot;');
 }
 
-// ─── EVENTS ───────────────────────────────────────────────────────────────────
+// ─── EVENTS & BOOT ────────────────────────────────────────────────────────────
 
-$('btn-play').addEventListener('click', startGame);
-$('btn-submit-guess').addEventListener('click', submitGuess);
+function initChromaEvents() {
+    if (isChromaInitialized) return; // Prevent double-binding if they click the button twice
 
-$('btn-continue').addEventListener('click', () => {
-    game.round++;
-    if (game.round < ROUNDS) doRound();
-    else showFinal();
-});
+    // 1. Assign all DOM elements now that we are sure the HTML is loaded
+    trackHue  = $('track-hue');  handleHue = $('handle-hue');
+    trackSat  = $('track-sat');  handleSat = $('handle-sat');
+    trackBri  = $('track-bri');  handleBri = $('handle-bri');
+    colorPreview = $('color-preview');
+    ring         = $('c-ring');
+    countdownNum = $('countdown-num');
+    activeLabel  = $('active-slider-label');
+    previewRound = $('preview-round');
 
-// ─── BOOT ─────────────────────────────────────────────────────────────────────
+    // 2. Attach Draggable Logic
+    makeDraggable(trackHue, 'HUE',        (v) => { pickerH = v * 360; });
+    makeDraggable(trackSat, 'SATURATION', (v) => { pickerS = v; });
+    makeDraggable(trackBri, 'BRIGHTNESS', (v) => { pickerB = v; });
+
+    // 3. Attach Click Listeners
+    $('btn-play').addEventListener('click', startGame);
+    $('btn-submit-guess').addEventListener('click', submitGuess);
+    $('btn-continue').addEventListener('click', () => {
+        game.round++;
+        if (game.round < ROUNDS) doRound();
+        else showFinal();
+    });
+
+    isChromaInitialized = true;
+}
 
 export function startChroma() {
     document.getElementById('hub-wrapper').style.display = 'none';
     document.getElementById('chroma-wrapper').style.display = 'block';
+
+    initChromaEvents(); // Setup the DOM and events right before playing
     updatePicker();
     bootstrap();
 }
