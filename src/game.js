@@ -204,12 +204,24 @@ function startCountdown(onEnd) {
 // ─── GAME FLOW ────────────────────────────────────────────────────────────────
 
 function startGame() {
+    if (!dailyTargets || dailyTargets.length === 0) {
+        debug('ERROR: No daily targets loaded');
+        return;
+    }
     game = { round: 0, targets: [...dailyTargets], guesses: [], scores: [] };
     doRound();
 }
 
 function doRound() {
+    if (game.round >= game.targets.length) {
+        debug('ERROR: Round out of bounds');
+        return;
+    }
     const t = game.targets[game.round];
+    if (!t) {
+        debug('ERROR: Target color not found for round', game.round);
+        return;
+    }
     $('mem-swatch').style.backgroundColor = hsbToHsl(t.h, t.s, t.b);
     $('mem-round-num').textContent         = game.round + 1;
     show('memorize');
@@ -225,8 +237,16 @@ function doRound() {
 }
 
 function submitGuess() {
+    if (game.round >= game.targets.length) {
+        debug('ERROR: Cannot submit guess - round out of bounds');
+        return;
+    }
     const guess  = { h: pickerH, s: pickerS, b: pickerB };
     const target = game.targets[game.round];
+    if (!target) {
+        debug('ERROR: Target not found for current round');
+        return;
+    }
     const dist   = rgbDistance(target.h, target.s, target.b, guess.h, guess.s, guess.b);
     const score  = calcScore(dist);
 
@@ -561,7 +581,7 @@ function escHtml(str) {
 // ─── EVENTS & BOOT ────────────────────────────────────────────────────────────
 
 function initChromaEvents() {
-    if (isChromaInitialized) return; // Prevent double-binding if they click the button twice
+    if (isChromaInitialized) return;
 
     // 1. Assign all DOM elements now that we are sure the HTML is loaded
     trackHue  = $('track-hue');  handleHue = $('handle-hue');
@@ -573,19 +593,43 @@ function initChromaEvents() {
     activeLabel  = $('active-slider-label');
     previewRound = $('preview-round');
 
+    // Verify critical DOM elements exist
+    if (!trackHue || !trackSat || !trackBri || !colorPreview || !ring) {
+        debug('ERROR: Missing critical DOM elements for color picker');
+        return;
+    }
+
     // 2. Attach Draggable Logic
     makeDraggable(trackHue, 'HUE',        (v) => { pickerH = v * 360; });
     makeDraggable(trackSat, 'SATURATION', (v) => { pickerS = v; });
     makeDraggable(trackBri, 'BRIGHTNESS', (v) => { pickerB = v; });
 
     // 3. Attach Click Listeners
-    $('btn-play').addEventListener('click', startGame);
-    $('btn-submit-guess').addEventListener('click', submitGuess);
-    $('btn-continue').addEventListener('click', () => {
-        game.round++;
-        if (game.round < ROUNDS) doRound();
-        else showFinal();
-    });
+    const btnPlay = $('btn-play');
+    const btnSubmit = $('btn-submit-guess');
+    const btnContinue = $('btn-continue');
+
+    if (btnPlay) {
+        btnPlay.addEventListener('click', startGame);
+    } else {
+        debug('ERROR: btn-play not found');
+    }
+
+    if (btnSubmit) {
+        btnSubmit.addEventListener('click', submitGuess);
+    } else {
+        debug('ERROR: btn-submit-guess not found');
+    }
+
+    if (btnContinue) {
+        btnContinue.addEventListener('click', () => {
+            game.round++;
+            if (game.round < ROUNDS) doRound();
+            else showFinal();
+        });
+    } else {
+        debug('ERROR: btn-continue not found');
+    }
 
     isChromaInitialized = true;
 }
