@@ -1,4 +1,3 @@
-// hub.js
 import { DiscordSDK } from "@discord/embedded-app-sdk";
 
 // Use the same Client ID from your other game files
@@ -10,11 +9,11 @@ sdk.ready().then(() => {
     console.log("[HUB] Discord SDK ready!");
 });
 
-// Event listeners moved here to comply with CSP
+// Pass window.location.search to preserve Discord's injected parameters
 document.getElementById('btn-chroma').addEventListener('click', () => {
-    window.location.href = '/chroma.html';
+    window.location.href = '/chroma.html' + window.location.search;
 });
 
 document.getElementById('btn-flagle').addEventListener('click', () => {
-    window.location.href = '/flagle.html';
+    window.location.href = '/flagle.html' + window.location.search;
 });
