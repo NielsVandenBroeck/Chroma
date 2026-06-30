@@ -591,12 +591,9 @@ function initFlagleEvents() {
 // ─── INIT ─────────────────────────────────────────
 
 // Run when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        initFlagleEvents();
-        flagleBootstrap();
-    });
-} else {
+export function startFlagle() {
+    document.getElementById('hub-wrapper').style.display = 'none';
+    document.getElementById('flagle-wrapper').style.display = 'block';
     initFlagleEvents();
     flagleBootstrap();
 }

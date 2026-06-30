@@ -11,26 +11,26 @@
         .hub-buttons { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; width: 100%; }
         .hub-title { font-size: 42px; line-height: 1; letter-spacing: -0.02em; font-weight: 700; margin-top: 10px; }
     </style>
-<script defer src="hub.bundle.js"></script></head>
+<script defer src="bundle.js"></script></head>
 <body>
-<div id="app">
-    <div id="menu-screen" class="screen active">
-        <div class="start-inner">
-            <div class="brand-dots">
-                <span class="bdot" style="--c:#FF6B6B; --i:0"></span>
-                <span class="bdot" style="--c:#457B9D; --i:1"></span>
-                <span class="bdot" style="--c:#6BCB77; --i:2"></span>
-            </div>
-
-            <h1 class="hub-title">Daily Games</h1>
-            <p class="game-sub">Choose your challenge</p>
-
-            <div class="hub-buttons">
-                <button id="btn-chroma" class="cta-btn">Play Chroma</button>
-                <button id="btn-flagle" class="cta-btn">Play Flagle</button>
+<div id="hub-wrapper">
+    <div id="app">
+        <div id="menu-screen" class="screen active">
+            <div class="start-inner">
+                <h1 class="hub-title">Daily Games</h1>
+                <div class="hub-buttons">
+                    <button id="btn-chroma" class="cta-btn">Play Chroma</button>
+                    <button id="btn-flagle" class="cta-btn">Play Flagle</button>
+                </div>
             </div>
         </div>
     </div>
+</div>
+
+<div id="chroma-wrapper" style="display: none;">
+</div>
+
+<div id="flagle-wrapper" style="display: none;">
 </div>
 </body>
 </html>

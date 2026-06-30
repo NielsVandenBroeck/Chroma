@@ -582,5 +582,9 @@ $('btn-continue').addEventListener('click', () => {
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 
-updatePicker();
-bootstrap();
+export function startChroma() {
+    document.getElementById('hub-wrapper').style.display = 'none';
+    document.getElementById('chroma-wrapper').style.display = 'block';
+    updatePicker();
+    bootstrap();
+}
