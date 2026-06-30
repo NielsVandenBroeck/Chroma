@@ -23,8 +23,7 @@ module.exports = {
 
         new CopyWebpackPlugin({
             patterns: [
-                { from: './public/style.css', to: 'style.css' },
-                { from: './public/flagle-style.css', to: 'flagle-style.css' }
+                { from: './public/style.css', to: 'style.css' }
             ]
         })
     ],

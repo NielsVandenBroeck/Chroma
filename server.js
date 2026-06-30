@@ -1,5 +1,5 @@
 // =====================================================
-// server.js — Chroma + Flagle Discord Activity Backend
+// server.js — Chroma Discord Activity Backend
 // =====================================================
 // Discord Activities run inside an iframe on discord.com.
 // The client SDK gives us a short-lived `code` which we
@@ -12,11 +12,6 @@
 //   POST /api/score           — Submit completed Chroma game score
 //   GET  /api/leaderboard     — Today's Chroma leaderboard (top 50)
 //
-// Flagle Endpoints:
-//   GET  /api/flagle/daily    — Today's flag + played status
-//   POST /api/flagle/score    — Submit completed Flagle score
-//   GET  /api/flagle/leaderboard — Today's Flagle leaderboard (top 50)
-//
 //   GET  /api/ping            — Health check
 // =====================================================
 
@@ -26,9 +21,6 @@ const path = require('path');
 const express = require('express');
 const cors    = require('cors');
 const db      = require('./db');
-const { FLAGS } = require('./flag-data');
-
-const bot = require('./bot.js');
 
 const app = express();
 
@@ -65,9 +57,8 @@ app.get('/', (req, res) => {
 
 db.init().then(() => {
     app.listen(PORT, () => {
-        console.log(`[server] Chroma + Flagle backend listening on :${PORT}`);
+        console.log(`[server] Chroma backend listening on :${PORT}`);
         scheduleMidnightSeed();
-        bot.startBot(); // Boot up the chat bot alongside the API
     });
 }).catch((err) => {
     console.error('[server] Failed to init DB:', err);
@@ -319,203 +310,6 @@ app.get('/api/leaderboard', async (req, res) => {
     }
 });
 
-// ─── FLAGLE ROUTES ────────────────────────────────
-
-/**
- * GET /api/flagle/daily
- * Returns today's flag definition + whether this user has already played.
- * The flag's guessable colors are returned without their target values
- * until the user has submitted, to prevent cheating.
- */
-app.get('/api/flagle/daily', async (req, res) => {
-    const token = extractBearer(req);
-    if (!token) return res.status(401).json({ error: 'Unauthorised' });
-
-    try {
-        const user    = await fetchDiscordUser(token);
-        const dateStr = todayUTC();
-        const flagIndex = db.getTodayFlagIndex(dateStr, FLAGS.length);
-        const flag    = FLAGS[flagIndex];
-        const played  = db.hasFlaglePlayed(dateStr, user.id);
-
-        // Separate guessable and pre-filled groups
-        const guessableGroups = flag.colorGroups.filter(g => g.isGuessable);
-        const prefilledGroups = flag.colorGroups.filter(g => !g.isGuessable);
-
-        // Build the response — strip target colors from guessable groups unless already played
-        const responseGroups = flag.colorGroups.map(group => ({
-            id:          group.id,
-            label:       group.label,
-            isGuessable: group.isGuessable,
-            paths:       group.paths,
-            // Only reveal the target color if pre-filled (already visible) or already played
-            color:       (!group.isGuessable || !!played) ? group.color : null,
-        }));
-
-        res.json({
-            date:          dateStr,
-            flagIndex,
-            flagName:      flag.name,
-            viewBox:       flag.viewBox,
-            colorGroups:   responseGroups,
-            guessableCount: guessableGroups.length,
-            alreadyPlayed:  !!played,
-            previousResult: played ?? null,
-            user: {
-                id:       user.id,
-                username: user.global_name ?? user.username,
-                avatar:   user.avatar,
-            },
-        });
-    } catch (err) {
-        console.error('[flagle/daily] Error:', err.message);
-        res.status(502).json({ error: 'Failed to fetch user from Discord' });
-    }
-});
-
-/**
- * POST /api/flagle/score
- * Header: Authorization: Bearer <discord_access_token>
- * Body: { guesses: [{h,s,b}], channelId?: string }
- *
- * The client sends its raw HSB guesses (NOT scores).
- * We score them here server-side against the real target colors,
- * so clients can never fake a perfect score.
- */
-app.post('/api/flagle/score', async (req, res) => {
-    const token = extractBearer(req);
-    if (!token) return res.status(401).json({ error: 'Unauthorised' });
-
-    const { guesses, channelId } = req.body;
-
-    // Basic shape validation
-    if (!Array.isArray(guesses) || guesses.length < 1 || guesses.length > 3) {
-        return res.status(400).json({ error: 'Invalid guesses array' });
-    }
-    for (const g of guesses) {
-        if (typeof g.h !== 'number' || typeof g.s !== 'number' || typeof g.b !== 'number') {
-            return res.status(400).json({ error: 'Each guess must have h, s, b numbers' });
-        }
-    }
-
-    try {
-        const user      = await fetchDiscordUser(token);
-        const dateStr   = todayUTC();
-        const flagIndex = db.getTodayFlagIndex(dateStr, FLAGS.length);
-        const flag      = FLAGS[flagIndex];
-
-        // Get only the guessable color groups (same order client used)
-        const guessableGroups = flag.colorGroups.filter(g => g.isGuessable);
-
-        if (guesses.length !== guessableGroups.length) {
-            return res.status(400).json({
-                error: `Expected ${guessableGroups.length} guesses for this flag, got ${guesses.length}`
-            });
-        }
-
-        // Score each guess against its target color (server-side, cannot be faked)
-        const scores = guessableGroups.map((group, i) => {
-            const target = group.color;
-            const guess  = guesses[i];
-            const dist   = rgbDistanceHsb(target.h, target.s, target.b, guess.h, guess.s, guess.b);
-            return calcFlagleScore(dist);
-        });
-
-        const total = scores.reduce((a, b) => a + b, 0);
-
-        const result = db.saveFlagleScore({
-            dateStr,
-            userId:   user.id,
-            username: user.global_name ?? user.username,
-            avatar:   user.avatar ?? null,
-            flagName: flag.name,
-            scores,
-            total,
-        });
-
-        if (!result.inserted) {
-            return res.status(409).json({
-                error:    'Already submitted today',
-                existing: result.existing,
-            });
-        }
-
-        if (channelId) {
-            bot.sendFlagleLeaderboardToChannel(
-                channelId,
-                `@${user.global_name ?? user.username} guessed today's Flagle flag!`
-            );
-        }
-
-        const board = db.getFlagleLeaderboard(dateStr);
-        const rank  = board.findIndex((r) => r.userId === user.id) + 1;
-
-        // Return scores AND the revealed color groups so the client can show the reveal
-        const revealedGroups = flag.colorGroups.map(group => ({
-            id:          group.id,
-            label:       group.label,
-            isGuessable: group.isGuessable,
-            paths:       group.paths,
-            color:       group.color, // Now revealed for all groups
-        }));
-
-        res.json({
-            ok: true,
-            scores,
-            total,
-            rank,
-            totalPlayers: board.length,
-            flagName: flag.name,
-            colorGroups: revealedGroups,
-        });
-    } catch (err) {
-        console.error('[flagle/score] Error:', err.message);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-/**
- * GET /api/flagle/leaderboard
- * Query: ?date=YYYY-MM-DD (optional)
- */
-app.get('/api/flagle/leaderboard', async (req, res) => {
-    const token = extractBearer(req);
-    if (!token) return res.status(401).json({ error: 'Unauthorised' });
-
-    const dateStr = typeof req.query.date === 'string'
-        ? req.query.date
-        : todayUTC();
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        return res.status(400).json({ error: 'Invalid date format' });
-    }
-
-    try {
-        const user  = await fetchDiscordUser(token);
-        const board = db.getFlagleLeaderboard(dateStr);
-
-        // Also send the flag name so the leaderboard can show "Today's flag: France"
-        const flagIndex = db.getTodayFlagIndex(dateStr, FLAGS.length);
-        const flagName  = FLAGS[flagIndex]?.name ?? 'Unknown';
-
-        res.json({
-            date:    dateStr,
-            flagName,
-            board: board.map((r, i) => ({
-                rank:     i + 1,
-                userId:   r.userId,
-                username: r.username,
-                avatar:   r.avatar,
-                total:    r.total,
-                scores:   r.scores,
-                isMe:     r.userId === user.id,
-            })),
-        });
-    } catch (err) {
-        console.error('[flagle/leaderboard] Error:', err.message);
-        res.status(502).json({ error: 'Failed to fetch user from Discord' });
-    }
-});
 
 // ─── MIDNIGHT SEED CRON ───────────────────────────
 
@@ -530,7 +324,6 @@ function scheduleMidnightSeed() {
         const dateStr = todayUTC();
         try {
             db.seedColors(dateStr);
-            db.seedFlagIndex(dateStr, FLAGS.length);
             console.log(`[cron] Midnight seed complete for ${dateStr}`);
         } catch (err) {
             console.error('[cron] Seed failed:', err);

@@ -1,0 +1,8 @@
+
+> chroma@1.0.0 start
+> node server.js
+
+◇ injected env (0) from .env // tip: ⌘ suppress logs { quiet: true }
+[db] Initialised — DB path: /home/nielsvandenbroeck/WebstormProjects/Chroma/data/chroma.sqlite
+[server] Chroma backend listening on :3000
+[cron] Next seed in 3722s (2026-07-01T00:00:00+02:00)
